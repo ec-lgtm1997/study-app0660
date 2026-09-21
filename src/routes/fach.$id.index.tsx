@@ -15,7 +15,7 @@ import {
 } from "@/lib/db";
 import type { Topic } from "@/lib/models";
 
-export const Route = createFileRoute("/fach/$id")({
+export const Route = createFileRoute("/fach/$id/")({
   head: () => ({
     meta: [
       { title: "Fach — Lernplattform" },
