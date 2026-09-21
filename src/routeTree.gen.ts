@@ -24,9 +24,9 @@ const FachIdIndexRoute = FachIdIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const FachIdThemaTopicIdRoute = FachIdThemaTopicIdRouteImport.update({
-  id: '/fach/$id/thema/$topicId',
-  path: '/fach/$id/thema/$topicId',
-  getParentRoute: () => rootRouteImport,
+  id: '/thema/$topicId',
+  path: '/thema/$topicId',
+  getParentRoute: () => FachIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -56,7 +56,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   FachIdIndexRoute: typeof FachIdIndexRoute
-  FachIdThemaTopicIdRoute: typeof FachIdThemaTopicIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -77,10 +76,10 @@ declare module '@tanstack/react-router' {
     }
     '/fach/$id/thema/$topicId': {
       id: '/fach/$id/thema/$topicId'
-      path: '/fach/$id/thema/$topicId'
+      path: '/thema/$topicId'
       fullPath: '/fach/$id/thema/$topicId'
       preLoaderRoute: typeof FachIdThemaTopicIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FachIdRoute
     }
   }
 }
@@ -88,7 +87,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   FachIdIndexRoute: FachIdIndexRoute,
-  FachIdThemaTopicIdRoute: FachIdThemaTopicIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
