@@ -10,53 +10,102 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as FachIdIndexRouteImport } from './routes/fach.$id.index'
-import { Route as FachIdThemaTopicIdRouteImport } from './routes/fach.$id.thema.$topicId'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as FachIdRouteImport } from './routes/fach.$id'
+import { Route as LernenIdRouteImport } from './routes/lernen.$id'
+import { Route as AdminFachIdIndexRouteImport } from './routes/admin.fach.$id.index'
+import { Route as AdminFachIdThemaTopicIdRouteImport } from './routes/admin.fach.$id.thema.$topicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FachIdIndexRoute = FachIdIndexRouteImport.update({
-  id: '/fach/$id/',
-  path: '/fach/$id/',
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FachIdThemaTopicIdRoute = FachIdThemaTopicIdRouteImport.update({
-  id: '/fach/$id/thema/$topicId',
-  path: '/fach/$id/thema/$topicId',
+const FachIdRoute = FachIdRouteImport.update({
+  id: '/fach/$id',
+  path: '/fach/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LernenIdRoute = LernenIdRouteImport.update({
+  id: '/lernen/$id',
+  path: '/lernen/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminFachIdIndexRoute = AdminFachIdIndexRouteImport.update({
+  id: '/admin/fach/$id/',
+  path: '/admin/fach/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminFachIdThemaTopicIdRoute = AdminFachIdThemaTopicIdRouteImport.update({
+  id: '/admin/fach/$id/thema/$topicId',
+  path: '/admin/fach/$id/thema/$topicId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/fach/$id/': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
+  '/fach/$id': typeof FachIdRoute
+  '/lernen/$id': typeof LernenIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/fach/$id/': typeof AdminFachIdIndexRoute
+  '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/fach/$id': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
+  '/fach/$id': typeof FachIdRoute
+  '/lernen/$id': typeof LernenIdRoute
+  '/admin': typeof AdminIndexRoute
+  '/admin/fach/$id': typeof AdminFachIdIndexRoute
+  '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/fach/$id/': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
+  '/fach/$id': typeof FachIdRoute
+  '/lernen/$id': typeof LernenIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/fach/$id/': typeof AdminFachIdIndexRoute
+  '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/fach/$id/' | '/fach/$id/thema/$topicId'
+  fullPaths:
+    | '/'
+    | '/fach/$id'
+    | '/lernen/$id'
+    | '/admin/'
+    | '/admin/fach/$id/'
+    | '/admin/fach/$id/thema/$topicId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/fach/$id' | '/fach/$id/thema/$topicId'
-  id: '__root__' | '/' | '/fach/$id/' | '/fach/$id/thema/$topicId'
+  to:
+    | '/'
+    | '/fach/$id'
+    | '/lernen/$id'
+    | '/admin'
+    | '/admin/fach/$id'
+    | '/admin/fach/$id/thema/$topicId'
+  id:
+    | '__root__'
+    | '/'
+    | '/fach/$id'
+    | '/lernen/$id'
+    | '/admin/'
+    | '/admin/fach/$id/'
+    | '/admin/fach/$id/thema/$topicId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  FachIdIndexRoute: typeof FachIdIndexRoute
-  FachIdThemaTopicIdRoute: typeof FachIdThemaTopicIdRoute
+  FachIdRoute: typeof FachIdRoute
+  LernenIdRoute: typeof LernenIdRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminFachIdIndexRoute: typeof AdminFachIdIndexRoute
+  AdminFachIdThemaTopicIdRoute: typeof AdminFachIdThemaTopicIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -68,18 +117,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fach/$id/': {
-      id: '/fach/$id/'
-      path: '/fach/$id'
-      fullPath: '/fach/$id/'
-      preLoaderRoute: typeof FachIdIndexRouteImport
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fach/$id/thema/$topicId': {
-      id: '/fach/$id/thema/$topicId'
-      path: '/fach/$id/thema/$topicId'
-      fullPath: '/fach/$id/thema/$topicId'
-      preLoaderRoute: typeof FachIdThemaTopicIdRouteImport
+    '/fach/$id': {
+      id: '/fach/$id'
+      path: '/fach/$id'
+      fullPath: '/fach/$id'
+      preLoaderRoute: typeof FachIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lernen/$id': {
+      id: '/lernen/$id'
+      path: '/lernen/$id'
+      fullPath: '/lernen/$id'
+      preLoaderRoute: typeof LernenIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/fach/$id/': {
+      id: '/admin/fach/$id/'
+      path: '/admin/fach/$id'
+      fullPath: '/admin/fach/$id/'
+      preLoaderRoute: typeof AdminFachIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/fach/$id/thema/$topicId': {
+      id: '/admin/fach/$id/thema/$topicId'
+      path: '/admin/fach/$id/thema/$topicId'
+      fullPath: '/admin/fach/$id/thema/$topicId'
+      preLoaderRoute: typeof AdminFachIdThemaTopicIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -87,8 +157,11 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  FachIdIndexRoute: FachIdIndexRoute,
-  FachIdThemaTopicIdRoute: FachIdThemaTopicIdRoute,
+  FachIdRoute: FachIdRoute,
+  LernenIdRoute: LernenIdRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminFachIdIndexRoute: AdminFachIdIndexRoute,
+  AdminFachIdThemaTopicIdRoute: AdminFachIdThemaTopicIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
