@@ -10,53 +10,33 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as FachIdIndexRouteImport } from './routes/fach.$id.index'
-import { Route as FachIdThemaTopicIdRouteImport } from './routes/fach.$id.thema.$topicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FachIdIndexRoute = FachIdIndexRouteImport.update({
-  id: '/fach/$id/',
-  path: '/fach/$id/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FachIdThemaTopicIdRoute = FachIdThemaTopicIdRouteImport.update({
-  id: '/fach/$id/thema/$topicId',
-  path: '/fach/$id/thema/$topicId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/fach/$id/': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/fach/$id': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/fach/$id/': typeof FachIdIndexRoute
-  '/fach/$id/thema/$topicId': typeof FachIdThemaTopicIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/fach/$id/' | '/fach/$id/thema/$topicId'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/fach/$id' | '/fach/$id/thema/$topicId'
-  id: '__root__' | '/' | '/fach/$id/' | '/fach/$id/thema/$topicId'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  FachIdIndexRoute: typeof FachIdIndexRoute
-  FachIdThemaTopicIdRoute: typeof FachIdThemaTopicIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -68,27 +48,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fach/$id/': {
-      id: '/fach/$id/'
-      path: '/fach/$id'
-      fullPath: '/fach/$id/'
-      preLoaderRoute: typeof FachIdIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/fach/$id/thema/$topicId': {
-      id: '/fach/$id/thema/$topicId'
-      path: '/fach/$id/thema/$topicId'
-      fullPath: '/fach/$id/thema/$topicId'
-      preLoaderRoute: typeof FachIdThemaTopicIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  FachIdIndexRoute: FachIdIndexRoute,
-  FachIdThemaTopicIdRoute: FachIdThemaTopicIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
