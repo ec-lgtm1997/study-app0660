@@ -77,11 +77,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Lernplattform" },
+      { name: "description", content: "Persönliche Lern-App mit Fächern, Themengebieten und Fragen." },
+      { name: "author", content: "Lernplattform" },
+      { property: "og:title", content: "Lernplattform" },
+      { property: "og:description", content: "Persönliche Lern-App mit Fächern, Themengebieten und Fragen." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -97,7 +97,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
+  errorComponent: lazy(() => Promise.resolve({ default: ErrorComponent })),
 });
 
 function RootShell({ children }: { children: ReactNode }) {
