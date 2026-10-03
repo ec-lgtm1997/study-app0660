@@ -142,3 +142,25 @@
     color: var(--color-foreground);
   }
 }
+
+/* Lernbereich – ruhiges, helles Farbschema (Konzept „Lernplattform“) */
+@theme {
+  --color-lp-bg: #f6f7f5;
+  --color-lp-surface: #ffffff;
+  --color-lp-line: #e3e7e4;
+  --color-lp-line-soft: #eef1ef;
+  --color-lp-track: #edf0ee;
+  --color-lp-ink: #1c2826;
+  --color-lp-ink-2: #2f3b38;
+  --color-lp-ink-3: #44514d;
+  --color-lp-muted: #56635f;
+  --color-lp-sage: #2e6e62;
+  --color-lp-sage-dark: #1f4f46;
+  --color-lp-sage-soft: #e6f0ec;
+  --color-lp-sage-line: #9cc3b8;
+  --color-lp-sage-on: #dcebe6;
+  --color-lp-warn: #b25e26;
+  --color-lp-warn-ink: #8a4a1c;
+  --color-lp-warn-soft: #fbede4;
+  --font-lp: "Manrope", ui-sans-serif, system-ui, sans-serif;
+}

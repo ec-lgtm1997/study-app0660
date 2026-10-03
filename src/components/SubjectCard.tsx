@@ -22,7 +22,7 @@ export function SubjectCard({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">
-          <Link to="/fach/$id" params={{ id: subject.id }} className="hover:text-primary">
+          <Link to="/admin/fach/$id" params={{ id: subject.id }} className="hover:text-primary">
             {subject.name}
           </Link>
         </CardTitle>

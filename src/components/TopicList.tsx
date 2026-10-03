@@ -27,15 +27,13 @@ export function TopicList({
         <li key={topic.id} className="flex flex-wrap items-center gap-2 p-3">
           <div className="min-w-0 flex-1">
             <Link
-              to="/fach/$id/thema/$topicId"
+              to="/admin/fach/$id/thema/$topicId"
               params={{ id: subjectId, topicId: topic.id }}
               className="font-medium hover:text-primary"
             >
               {topic.name}
             </Link>
-            <p className="text-sm text-muted-foreground">
-              {questionCounts[topic.id] ?? 0} Fragen
-            </p>
+            <p className="text-sm text-muted-foreground">{questionCounts[topic.id] ?? 0} Fragen</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => onRename(topic)}>
             Umbenennen
