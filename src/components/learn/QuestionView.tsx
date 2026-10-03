@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check, Circle, X } from "lucide-react";
 import { useState } from "react";
 import { clozeBlanks, isClozeCorrect, type Answer, type LQuestion, type Option } from "@/lib/learn";
 
@@ -8,9 +8,11 @@ interface Props {
   onChange: (a: Answer) => void;
   /** true = Lösung wird angezeigt (Feedback-Zustand) */
   revealed: boolean;
+  /** Von der KI als getroffen erkannte Kernpunkte (nur offene Fragen) */
+  aiHits?: number[] | null | undefined;
 }
 
-export function QuestionView({ q, answer, onChange, revealed }: Props) {
+export function QuestionView({ q, answer, onChange, revealed, aiHits }: Props) {
   switch (answer.kind) {
     case "choice":
       return <ChoiceView q={q} answer={answer} onChange={onChange} revealed={revealed} />;
@@ -21,7 +23,9 @@ export function QuestionView({ q, answer, onChange, revealed }: Props) {
     case "cloze":
       return <ClozeView q={q} answer={answer} onChange={onChange} revealed={revealed} />;
     case "open":
-      return <OpenView q={q} answer={answer} onChange={onChange} revealed={revealed} />;
+      return (
+        <OpenView q={q} answer={answer} onChange={onChange} revealed={revealed} aiHits={aiHits} />
+      );
   }
 }
 
@@ -406,6 +410,7 @@ function OpenView({
   answer,
   onChange,
   revealed,
+  aiHits,
 }: Props & { answer: Extract<Answer, { kind: "open" }> }) {
   return (
     <div className="flex flex-col gap-4">
@@ -426,15 +431,38 @@ function OpenView({
       {revealed ? (
         <div className="flex flex-col gap-3 rounded-[18px] border border-lp-line bg-lp-surface p-4">
           <span className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-lp-sage">
-            Musterlösung – Kernpunkte
+            {Array.isArray(aiHits) ? "Kernpunkte – Abgleich" : "Musterlösung – Kernpunkte"}
           </span>
           <ul className="flex flex-col gap-2">
-            {(q.solution.key_points ?? []).map((p) => (
-              <li key={p} className="flex items-start gap-2.5 text-sm leading-snug text-lp-ink-2">
-                <Check className="mt-0.5 size-[18px] flex-none text-lp-sage" strokeWidth={2.4} />
-                <span>{p}</span>
-              </li>
-            ))}
+            {(q.solution.key_points ?? []).map((p, i) => {
+              const judged = Array.isArray(aiHits);
+              const hit = judged && aiHits.includes(i);
+              return (
+                <li key={p} className="flex items-start gap-2.5 text-sm leading-snug text-lp-ink-2">
+                  {judged && !hit ? (
+                    <Circle
+                      className="mt-0.5 size-[18px] flex-none text-lp-warn"
+                      strokeWidth={2.2}
+                    />
+                  ) : (
+                    <Check
+                      className="mt-0.5 size-[18px] flex-none text-lp-sage"
+                      strokeWidth={2.4}
+                    />
+                  )}
+                  <span>
+                    {p}
+                    {judged ? (
+                      <span
+                        className={`ml-1.5 text-xs font-bold ${hit ? "text-lp-sage" : "text-lp-warn-ink"}`}
+                      >
+                        {hit ? "· getroffen" : "· fehlt noch"}
+                      </span>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           {q.solution.model_answer ? (
             <details className="text-sm text-lp-ink-2">

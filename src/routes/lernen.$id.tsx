@@ -1,10 +1,11 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { QuestionView, questionTitle } from "@/components/learn/QuestionView";
 import { Bar, Card, Chip, Page, Spinner, primaryBtn, secondaryBtn } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
+import { aiAvailable, gradeOpenAnswer, type AiResult } from "@/lib/ai-grade.functions";
 import {
   DIFFICULTY_LABEL,
   buildRound,
@@ -79,6 +80,17 @@ function Player({
   const [revealed, setRevealed] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [saveError, setSaveError] = useState(false);
+  const [ai, setAi] = useState<{ loading: boolean; result: AiResult | null }>({
+    loading: false,
+    result: null,
+  });
+  const aiQuery = useQuery({
+    queryKey: ["ai-available"],
+    queryFn: () => aiAvailable(),
+    staleTime: Infinity,
+    retry: false,
+  });
+  const aiOn = aiQuery.data?.available === true;
   const [sessionId] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -151,12 +163,18 @@ function Player({
   const isOpen = q.type === "open";
   const current = results.length > index ? results[index] : null;
 
-  const record = (score: number) => {
+  const record = (score: number, extraMeta?: Record<string, unknown>) => {
     setResults((r) => [...r, { q, score }]);
     if (clientId) {
-      saveAttempt({ questionId: q.id, clientId, sessionId, answer: a, score, mode }).catch(() =>
-        setSaveError(true),
-      );
+      saveAttempt({
+        questionId: q.id,
+        clientId,
+        sessionId,
+        answer: a,
+        score,
+        mode,
+        extraMeta,
+      }).catch(() => setSaveError(true));
     }
   };
 
@@ -164,6 +182,7 @@ function Player({
     const n = index + 1;
     setIndex(n);
     setRevealed(false);
+    setAi({ loading: false, result: null });
     if (round[n]) setAnswer(emptyAnswer(round[n]));
     else void queryClient.invalidateQueries({ queryKey: ["learn"] });
     window.scrollTo({ top: 0 });
@@ -190,10 +209,35 @@ function Player({
     else setRevealed(true);
   };
 
+  const askAi = async () => {
+    if (a.kind !== "open" || !a.text.trim()) return;
+    setAi({ loading: true, result: null });
+    let result: AiResult;
+    try {
+      result = await gradeOpenAnswer({
+        data: {
+          question: q.content.text ?? "",
+          keyPoints: q.solution.key_points ?? [],
+          modelAnswer: q.solution.model_answer ?? "",
+          userAnswer: a.text,
+        },
+      });
+    } catch {
+      result = { ok: false, reason: "error" };
+    }
+    setAi({ loading: false, result });
+    setRevealed(true);
+  };
+
+  const aiGrade = ai.result?.ok ? ai.result.grade : null;
+
   const rate = (score: number) => {
-    record(score);
+    record(score, aiGrade ? { ai_grade: aiGrade } : undefined);
     next();
   };
+
+  const suggested = (g: "wrong" | "partial" | "correct") =>
+    aiGrade === g ? " ring-2 ring-offset-2 ring-lp-ink" : "";
 
   const ready = isAnswerReady(q, a);
 
@@ -224,7 +268,15 @@ function Player({
 
       <h1 className="text-[21px] font-bold leading-snug sm:text-[22px]">{questionTitle(q)}</h1>
 
-      <QuestionView q={q} answer={a} onChange={setAnswer} revealed={revealed} />
+      <QuestionView
+        q={q}
+        answer={a}
+        onChange={setAnswer}
+        revealed={revealed}
+        aiHits={ai.result?.ok ? ai.result.hits : null}
+      />
+
+      {revealed && isOpen && ai.result ? <AiCard result={ai.result} /> : null}
 
       {revealed && !isOpen && current ? <Feedback q={q} score={current.score} /> : null}
 
@@ -238,26 +290,28 @@ function Player({
       <div className="mt-auto flex flex-col gap-2.5 pt-2">
         {revealed && isOpen ? (
           <>
-            <p className="text-center text-[15px] font-bold">Wie gut war deine Antwort?</p>
+            <p className="text-center text-[15px] font-bold">
+              {aiGrade ? "Übernimmst du die Einschätzung?" : "Wie gut war deine Antwort?"}
+            </p>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => rate(0)}
-                className="min-h-[52px] rounded-[14px] border-[1.5px] border-lp-warn bg-lp-surface text-sm font-bold text-lp-warn-ink hover:bg-lp-warn-soft"
+                className={`min-h-[52px] rounded-[14px] border-[1.5px] border-lp-warn bg-lp-surface text-sm font-bold text-lp-warn-ink hover:bg-lp-warn-soft${suggested("wrong")}`}
               >
                 Falsch
               </button>
               <button
                 type="button"
                 onClick={() => rate(0.5)}
-                className="min-h-[52px] rounded-[14px] border-[1.5px] border-[#9aa6a2] bg-lp-surface text-sm font-bold text-lp-ink-2 hover:bg-lp-bg"
+                className={`min-h-[52px] rounded-[14px] border-[1.5px] border-[#9aa6a2] bg-lp-surface text-sm font-bold text-lp-ink-2 hover:bg-lp-bg${suggested("partial")}`}
               >
                 Teilweise
               </button>
               <button
                 type="button"
                 onClick={() => rate(1)}
-                className="min-h-[52px] rounded-[14px] bg-lp-sage text-sm font-bold text-white hover:bg-lp-sage-dark"
+                className={`min-h-[52px] rounded-[14px] bg-lp-sage text-sm font-bold text-white hover:bg-lp-sage-dark${suggested("correct")}`}
               >
                 Richtig
               </button>
@@ -267,6 +321,26 @@ function Player({
           <button type="button" onClick={next} className={primaryBtn}>
             {index + 1 === round.length ? "Zur Auswertung" : "Weiter"}
           </button>
+        ) : isOpen && aiOn && a.kind === "open" && a.text.trim() ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void askAi()}
+              disabled={ai.loading}
+              className={`${primaryBtn} gap-2`}
+            >
+              <Sparkles className="size-[18px]" strokeWidth={2.2} />
+              {ai.loading ? "Antwort wird geprüft …" : "Antwort prüfen lassen"}
+            </button>
+            <button
+              type="button"
+              onClick={check}
+              disabled={ai.loading}
+              className="min-h-11 text-sm font-semibold text-lp-ink-3 hover:text-lp-sage"
+            >
+              Nur Lösung anzeigen
+            </button>
+          </>
         ) : (
           <>
             <button
@@ -295,6 +369,39 @@ function Player({
         </p>
       ) : null}
     </Page>
+  );
+}
+
+function AiCard({ result }: { result: AiResult }) {
+  if (!result.ok) {
+    const msg =
+      result.reason === "limit"
+        ? "Die KI macht gerade eine kurze Pause (Tageslimit erreicht). Vergleiche selbst mit den Kernpunkten."
+        : result.reason === "not_configured"
+          ? "Die KI-Prüfung ist noch nicht eingerichtet. Vergleiche selbst mit den Kernpunkten."
+          : "Die KI war gerade nicht erreichbar. Vergleiche selbst mit den Kernpunkten.";
+    return <p className="text-sm text-lp-muted">{msg}</p>;
+  }
+  const label =
+    result.grade === "correct"
+      ? "Richtig"
+      : result.grade === "partial"
+        ? "Teilweise richtig"
+        : "Noch nicht ganz";
+  const color = result.grade === "correct" ? "text-lp-sage" : "text-lp-warn-ink";
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[18px] border border-lp-line bg-lp-surface p-4">
+      <span className="flex items-center gap-2 text-[13px] font-extrabold uppercase tracking-[0.06em] text-lp-ink-3">
+        <Sparkles className="size-4" strokeWidth={2.2} /> KI-Einschätzung
+      </span>
+      <span className={`text-[17px] font-extrabold ${color}`}>{label}</span>
+      {result.feedback ? (
+        <p className="text-sm leading-relaxed text-lp-ink-2">{result.feedback}</p>
+      ) : null}
+      <span className="text-xs text-lp-muted">
+        Die KI kann sich irren – du entscheidest unten selbst.
+      </span>
+    </div>
   );
 }
 

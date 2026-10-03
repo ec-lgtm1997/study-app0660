@@ -149,6 +149,7 @@ export async function saveAttempt(input: {
   answer: unknown;
   score: number;
   mode: string;
+  extraMeta?: Record<string, unknown> | undefined;
 }) {
   const { error } = await supabase.from("attempts").insert({
     question_id: input.questionId,
@@ -156,7 +157,7 @@ export async function saveAttempt(input: {
     session_id: input.sessionId,
     answer: input.answer,
     score: input.score,
-    meta: { mode: input.mode },
+    meta: { mode: input.mode, ...(input.extraMeta ?? {}) },
   } as never);
   if (error) throw new Error(error.message);
 }
