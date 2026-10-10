@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo } from "react";
 import { Bar, Page, Spinner, Stat } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
-import { isExamRelevant, progressOf, ROUND_SIZE } from "@/lib/learn";
+import { EXAM_SIZE, examRuns, gradeFor, subjectExams, subjectGrading } from "@/lib/exams";
+import { isExamRelevant, progressOf } from "@/lib/learn";
 
 export const Route = createFileRoute("/fach/$id")({
   head: () => ({ meta: [{ title: "Fach — Lernplattform" }] }),
@@ -26,9 +27,21 @@ function FachSeite() {
         return { ...t, progress: progressOf(qs, latest) };
       })
       .filter((t) => t.progress.total > 0);
+    const grading = subjectGrading(subject);
+    const exams = subjectExams(subject).map((e) => {
+      const runs = examRuns(data.attempts, e.id);
+      const last = runs[0];
+      return {
+        ...e,
+        count: e.questions.length,
+        runs: runs.length,
+        last: last ? { pct: last.pct, grade: gradeFor(last.pct, grading) } : null,
+      };
+    });
     return {
       subject,
       topics,
+      exams,
       progress: progressOf(questions, latest),
       relevant: questions.filter(isExamRelevant).length,
     };
@@ -74,20 +87,21 @@ function FachSeite() {
           </div>
 
           <div className="flex flex-col gap-2.5">
-            <Link
-              to="/lernen/$id"
-              params={{ id }}
-              search={{ mode: "simulation" }}
-              className="flex items-center gap-3.5 rounded-[18px] bg-lp-sage px-[18px] py-4 text-white hover:bg-lp-sage-dark"
-            >
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-base font-bold">Prüfungssimulation</span>
-                <span className="text-[13px] text-lp-sage-on">
-                  {Math.min(ROUND_SIZE, view.progress.total)} gemischte Fragen, Auswertung am Ende
-                </span>
-              </div>
-              <ChevronRight className="size-5" strokeWidth={2.4} />
-            </Link>
+            {view.exams.length === 0 ? (
+              <Link
+                to="/pruefung/$id"
+                params={{ id }}
+                className="flex items-center gap-3.5 rounded-[18px] bg-lp-sage px-[18px] py-4 text-white hover:bg-lp-sage-dark"
+              >
+                <div className="flex flex-1 flex-col gap-0.5">
+                  <span className="text-base font-bold">Prüfungssimulation</span>
+                  <span className="text-[13px] text-lp-sage-on">
+                    {Math.min(EXAM_SIZE, view.progress.total)} gemischte Fragen, Note am Ende
+                  </span>
+                </div>
+                <ChevronRight className="size-5" strokeWidth={2.4} />
+              </Link>
+            ) : null}
             <div className="grid grid-cols-2 gap-2.5">
               {view.relevant > 0 ? (
                 <Link
@@ -120,6 +134,55 @@ function FachSeite() {
               )}
             </div>
           </div>
+
+          {view.exams.length ? (
+            <section className="flex flex-col gap-2">
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <h2 className="text-[17px] font-bold">Prüfungen</h2>
+                <Link
+                  to="/pruefung/$id"
+                  params={{ id }}
+                  className="text-sm font-semibold text-lp-sage hover:text-lp-sage-dark"
+                >
+                  Zufällige Prüfung
+                </Link>
+              </div>
+              <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {view.exams.map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      to="/pruefung/$id"
+                      params={{ id }}
+                      search={{ exam: e.id }}
+                      className="flex min-h-[72px] items-center gap-3 rounded-[18px] border border-lp-line bg-lp-surface px-4 py-3 hover:border-lp-sage-line"
+                    >
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <span className="text-[15px] font-bold">{e.name}</span>
+                        <span className="text-[13px] text-lp-muted">
+                          {e.last
+                            ? `Zuletzt ${e.last.pct} % · Note ${e.last.grade.grade}`
+                            : `${e.count} Fragen · noch offen`}
+                        </span>
+                      </div>
+                      {e.last ? (
+                        <span
+                          className={`inline-flex size-9 flex-none items-center justify-center rounded-full text-sm font-extrabold ${
+                            e.last.grade.grade <= 4
+                              ? "bg-lp-sage-soft text-lp-sage"
+                              : "bg-lp-warn-soft text-lp-warn-ink"
+                          }`}
+                        >
+                          {e.last.grade.grade}
+                        </span>
+                      ) : (
+                        <ChevronRight className="size-5 flex-none text-lp-muted" />
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section className="flex flex-col gap-2">
             <h2 className="mb-1 text-[17px] font-bold">Themengebiete</h2>

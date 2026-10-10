@@ -7,7 +7,9 @@ import type { Json } from "./models";
  *   "subject": "Pharmakologie 2",
  *   "topics": ["Thema A", ...],          // optional, bestimmt die Reihenfolge
  *   "topic": "Thema",                    // optional, Standard-Thema für alle Fragen
- *   "questions": [{ id, topic?, type, content, solution, meta? }]
+ *   "questions": [{ id, topic?, type, content, solution, meta? }],
+ *   "exams": [{ id, name, questions: [Fragen-IDs] }],   // optional, feste Prüfungen
+ *   "grading": [{ min, grade, label }]                  // optional, Notenschlüssel
  * }
  */
 export interface ImportQuestion {
@@ -19,18 +21,27 @@ export interface ImportQuestion {
   meta?: Json;
 }
 
+export interface ImportExam {
+  id: string;
+  name: string;
+  questions: string[];
+}
+
 export interface ImportFile {
   subject: string;
   description?: string;
   topics?: string[];
   topic?: string;
   questions: ImportQuestion[];
+  exams?: ImportExam[];
+  grading?: { min: number; grade: number; label: string }[];
 }
 
 export interface ImportPreview {
   subject: string;
   topicNames: string[];
   questionCount: number;
+  examCount: number;
 }
 
 export interface ImportResult {
@@ -38,6 +49,7 @@ export interface ImportResult {
   topicsCreated: number;
   inserted: number;
   skipped: number;
+  examCount: number;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -47,6 +59,7 @@ interface RawFile {
   subject?: unknown;
   topic?: unknown;
   questions?: unknown;
+  exams?: unknown;
 }
 
 interface RawQuestion {
@@ -84,6 +97,17 @@ export function parseImportFile(raw: string): ImportFile {
     if (typeof q.topic !== "string" && !hasFallbackTopic)
       throw new Error(`${q.id}: kein Thema angegeben.`);
   });
+  if (f.exams !== undefined) {
+    if (!Array.isArray(f.exams)) throw new Error("Feld „exams“ muss eine Liste sein.");
+    const ids = new Set((f.questions as RawQuestion[]).map((q) => q.id as string));
+    (f.exams as unknown[]).forEach((e, i) => {
+      if (!isObject(e) || typeof e["name"] !== "string" || !Array.isArray(e["questions"]))
+        throw new Error(`Prüfung ${i + 1}: ungültiges Format.`);
+      const unknown = (e["questions"] as unknown[]).filter((id) => !ids.has(id as string));
+      if (unknown.length)
+        throw new Error(`${e["name"]}: unbekannte Fragen ${unknown.slice(0, 3).join(", ")}`);
+    });
+  }
   return data as unknown as ImportFile;
 }
 
@@ -92,6 +116,7 @@ export function previewImport(file: ImportFile): ImportPreview {
     subject: file.subject.trim(),
     topicNames: orderedTopics(file),
     questionCount: file.questions.length,
+    examCount: file.exams?.length ?? 0,
   };
 }
 
@@ -183,10 +208,32 @@ export async function runImport(
     onProgress?.(Math.min(i + BATCH, rows.length), rows.length);
   }
 
+  // 5) Feste Prüfungen und Notenschlüssel am Fach speichern (ersetzt frühere Prüfungen)
+  if (file.exams?.length) {
+    const cur = await supabase.from("subjects").select("exam_config").eq("id", subjectId).single();
+    if (cur.error) throw new Error(cur.error.message);
+    const prev = (cur.data as { exam_config: Record<string, unknown> | null }).exam_config ?? {};
+    const exam_config = {
+      ...prev,
+      exams: file.exams.map((e, i) => ({
+        id: e.id || `p${i + 1}`,
+        name: e.name,
+        questions: e.questions,
+      })),
+      ...(file.grading?.length ? { grading: file.grading } : {}),
+    };
+    const upd = await supabase
+      .from("subjects")
+      .update({ exam_config } as never)
+      .eq("id", subjectId);
+    if (upd.error) throw new Error(upd.error.message);
+  }
+
   return {
     subjectCreated,
     topicsCreated: missing.length,
     inserted: rows.length,
     skipped: file.questions.length - rows.length,
+    examCount: file.exams?.length ?? 0,
   };
 }

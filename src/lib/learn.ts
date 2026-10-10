@@ -46,6 +46,7 @@ export interface LSubject {
   id: string;
   name: string;
   description: string | null;
+  exam_config: unknown;
 }
 
 export interface LTopic {
@@ -59,6 +60,8 @@ export interface LAttempt {
   question_id: string | null;
   score: number | null;
   created_at: string;
+  session_id: string | null;
+  meta: { mode?: string; exam_id?: string } | null;
 }
 
 export interface LearnData {
@@ -113,7 +116,11 @@ async function fetchAll<T>(
 export async function loadLearnData(clientId: string): Promise<LearnData> {
   const [subjects, topics, questions, attempts] = await Promise.all([
     fetchAll<LSubject>((a, b) =>
-      supabase.from("subjects").select("id, name, description").order("created_at").range(a, b),
+      supabase
+        .from("subjects")
+        .select("id, name, description, exam_config")
+        .order("created_at")
+        .range(a, b),
     ),
     fetchAll<LTopic>((a, b) =>
       supabase
@@ -133,7 +140,7 @@ export async function loadLearnData(clientId: string): Promise<LearnData> {
     fetchAll<LAttempt>((a, b) =>
       supabase
         .from("attempts")
-        .select("question_id, score, created_at")
+        .select("question_id, score, created_at, session_id, meta")
         .eq("client_id", clientId)
         .order("created_at")
         .range(a, b),
@@ -354,3 +361,53 @@ export const DIFFICULTY_LABEL: Record<number, string> = {
   2: "Mittel",
   3: "Anspruchsvoll",
 };
+
+/** Mehrere Antworten auf einmal speichern (z. B. am Ende einer Prüfung). */
+export async function saveAttempts(
+  rows: {
+    questionId: string;
+    answer: unknown;
+    score: number;
+    meta: Record<string, unknown>;
+  }[],
+  clientId: string,
+  sessionId: string,
+) {
+  if (!rows.length) return;
+  const { error } = await supabase.from("attempts").insert(
+    rows.map((r) => ({
+      question_id: r.questionId,
+      client_id: clientId,
+      session_id: sessionId,
+      answer: r.answer,
+      score: r.score,
+      meta: r.meta,
+    })) as never,
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Kurzfassung der richtigen Lösung (für Auswertungen). */
+export function solutionLines(q: LQuestion): string[] {
+  const text = (list: { id: string; text: string }[] | undefined) =>
+    new Map((list ?? []).map((o) => [o.id, o.text]));
+  switch (q.type) {
+    case "multiple_choice": {
+      const o = text(q.content.options);
+      return (q.solution.correct ?? []).map((id) => o.get(id) ?? "");
+    }
+    case "matching": {
+      const l = text(q.content.left);
+      const r = text(q.content.right);
+      return (q.solution.pairs ?? []).map(([a, b]) => `${l.get(a)} → ${r.get(b)}`);
+    }
+    case "ordering": {
+      const i = text(q.content.items);
+      return (q.solution.order ?? []).map((id, n) => `${n + 1}. ${i.get(id)}`);
+    }
+    case "cloze":
+      return clozeBlanks(q).map((b, n) => `Lücke ${n + 1}: ${q.solution.answers?.[b]?.[0] ?? ""}`);
+    default:
+      return q.solution.key_points ?? [];
+  }
+}

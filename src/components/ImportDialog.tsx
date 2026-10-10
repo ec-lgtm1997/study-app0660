@@ -32,7 +32,7 @@ export function ImportDialog({ open, onOpenChange, onImported }: ImportDialogPro
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
- 
+
   useEffect(() => {
     if (!open) return;
     setFile(null);
@@ -102,6 +102,7 @@ export function ImportDialog({ open, onOpenChange, onImported }: ImportDialogPro
               <p className="font-medium">{preview.subject}</p>
               <p className="text-muted-foreground">
                 {preview.questionCount} Fragen in {preview.topicNames.length} Themengebieten
+                {preview.examCount ? ` · ${preview.examCount} feste Prüfungen` : ""}
               </p>
               <ul className="mt-2 list-inside list-disc text-muted-foreground">
                 {preview.topicNames.map((t) => (
@@ -121,7 +122,8 @@ export function ImportDialog({ open, onOpenChange, onImported }: ImportDialogPro
               <p className="text-muted-foreground">
                 {result.subjectCreated ? "Fach neu angelegt. " : "Bestehendes Fach ergänzt. "}
                 {result.topicsCreated} Themen neu, {result.inserted} Fragen importiert
-                {result.skipped ? `, ${result.skipped} schon vorhanden` : ""}.
+                {result.skipped ? `, ${result.skipped} schon vorhanden` : ""}
+                {result.examCount ? `, ${result.examCount} Prüfungen eingerichtet` : ""}.
               </p>
             </div>
           ) : null}

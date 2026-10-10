@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as FachIdRouteImport } from './routes/fach.$id'
 import { Route as LernenIdRouteImport } from './routes/lernen.$id'
+import { Route as PruefungIdRouteImport } from './routes/pruefung.$id'
 import { Route as AdminFachIdIndexRouteImport } from './routes/admin.fach.$id.index'
 import { Route as AdminFachIdThemaTopicIdRouteImport } from './routes/admin.fach.$id.thema.$topicId'
 
@@ -36,6 +37,11 @@ const LernenIdRoute = LernenIdRouteImport.update({
   path: '/lernen/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PruefungIdRoute = PruefungIdRouteImport.update({
+  id: '/pruefung/$id',
+  path: '/pruefung/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminFachIdIndexRoute = AdminFachIdIndexRouteImport.update({
   id: '/admin/fach/$id/',
   path: '/admin/fach/$id/',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
+  '/pruefung/$id': typeof PruefungIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/fach/$id/': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
+  '/pruefung/$id': typeof PruefungIdRoute
   '/admin': typeof AdminIndexRoute
   '/admin/fach/$id': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
+  '/pruefung/$id': typeof PruefungIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/fach/$id/': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/fach/$id'
     | '/lernen/$id'
+    | '/pruefung/$id'
     | '/admin/'
     | '/admin/fach/$id/'
     | '/admin/fach/$id/thema/$topicId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/fach/$id'
     | '/lernen/$id'
+    | '/pruefung/$id'
     | '/admin'
     | '/admin/fach/$id'
     | '/admin/fach/$id/thema/$topicId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/fach/$id'
     | '/lernen/$id'
+    | '/pruefung/$id'
     | '/admin/'
     | '/admin/fach/$id/'
     | '/admin/fach/$id/thema/$topicId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   FachIdRoute: typeof FachIdRoute
   LernenIdRoute: typeof LernenIdRoute
+  PruefungIdRoute: typeof PruefungIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminFachIdIndexRoute: typeof AdminFachIdIndexRoute
   AdminFachIdThemaTopicIdRoute: typeof AdminFachIdThemaTopicIdRoute
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LernenIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pruefung/$id': {
+      id: '/pruefung/$id'
+      path: '/pruefung/$id'
+      fullPath: '/pruefung/$id'
+      preLoaderRoute: typeof PruefungIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/fach/$id/': {
       id: '/admin/fach/$id/'
       path: '/admin/fach/$id'
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   FachIdRoute: FachIdRoute,
   LernenIdRoute: LernenIdRoute,
+  PruefungIdRoute: PruefungIdRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminFachIdIndexRoute: AdminFachIdIndexRoute,
   AdminFachIdThemaTopicIdRoute: AdminFachIdThemaTopicIdRoute,

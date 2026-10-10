@@ -15,6 +15,7 @@ import {
   isAnswerReady,
   isExamRelevant,
   saveAttempt,
+  solutionLines,
   type Answer,
   type LQuestion,
   type Mode,
@@ -422,30 +423,6 @@ function Feedback({ q, score }: { q: LQuestion; score: number }) {
 }
 
 /** Kurzfassung der richtigen Lösung für die Auswertung. */
-function solutionLines(q: LQuestion): string[] {
-  const text = (list: { id: string; text: string }[] | undefined) =>
-    new Map((list ?? []).map((o) => [o.id, o.text]));
-  switch (q.type) {
-    case "multiple_choice": {
-      const o = text(q.content.options);
-      return (q.solution.correct ?? []).map((id) => o.get(id) ?? "");
-    }
-    case "matching": {
-      const l = text(q.content.left);
-      const r = text(q.content.right);
-      return (q.solution.pairs ?? []).map(([a, b]) => `${l.get(a)} → ${r.get(b)}`);
-    }
-    case "ordering": {
-      const i = text(q.content.items);
-      return (q.solution.order ?? []).map((id, n) => `${n + 1}. ${i.get(id)}`);
-    }
-    case "cloze":
-      return clozeBlanks(q).map((b, n) => `Lücke ${n + 1}: ${q.solution.answers?.[b]?.[0] ?? ""}`);
-    default:
-      return q.solution.key_points ?? [];
-  }
-}
-
 function ResultView({
   results,
   title,
