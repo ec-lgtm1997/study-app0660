@@ -178,7 +178,10 @@ function MatchingView({
       <div className="flex flex-col gap-2.5">
         {left.map((l) => {
           const chosen = pairs[l.id];
-          const ok = chosen === solution.get(l.id);
+          const target = solution.get(l.id);
+          const ok =
+            chosen !== undefined &&
+            (chosen === target || rightText.get(chosen) === rightText.get(target ?? ""));
           return (
             <div
               key={l.id}

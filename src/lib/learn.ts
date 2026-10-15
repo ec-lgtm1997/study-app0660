@@ -338,7 +338,12 @@ export function grade(q: LQuestion, a: Answer): number {
     case "matching": {
       const pairs = q.solution.pairs ?? [];
       if (!pairs.length) return 0;
-      const hits = pairs.filter(([l, r]) => a.pairs[l] === r).length;
+      // Vergleich über den Text: gleich lautende Ziele (z. B. „Barriere“) sind austauschbar
+      const txt = new Map((q.content.right ?? []).map((x) => [x.id, x.text]));
+      const hits = pairs.filter(([l, r]) => {
+        const chosen = a.pairs[l];
+        return chosen !== undefined && (chosen === r || txt.get(chosen) === txt.get(r));
+      }).length;
       return hits === pairs.length ? 1 : Math.round((hits / pairs.length) * 100) / 100;
     }
     case "ordering": {
