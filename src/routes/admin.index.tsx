@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { TestModeBadge } from "@/components/learn/ui";
+import { isTestMode, setTestMode } from "@/lib/learn";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,8 @@ function Startseite() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState<Subject | null>(null);
+  const [test, setTest] = useState(false);
+  useEffect(() => setTest(isTestMode()), []);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["subjects"] });
@@ -104,6 +108,36 @@ function Startseite() {
           />
         ))}
       </div>
+
+      <section className="mt-10 flex items-start justify-between gap-4 rounded-[22px] border border-lp-line bg-lp-surface p-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-lp text-[15px] font-bold tracking-normal">Testmodus</h2>
+          <p className="text-[13px] leading-relaxed text-lp-muted">
+            Zum Ausprobieren: Antworten und Prüfungen werden nicht gespeichert und tauchen in keiner
+            Statistik auf. Gilt nur auf diesem Gerät.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={test}
+          aria-label="Testmodus"
+          onClick={() => {
+            setTestMode(!test);
+            setTest(!test);
+          }}
+          className={`relative h-7 w-12 flex-none rounded-full transition-colors ${
+            test ? "bg-lp-sage" : "bg-lp-line"
+          }`}
+        >
+          <span
+            className={`absolute top-1 size-5 rounded-full bg-white shadow transition-[left] ${
+              test ? "left-6" : "left-1"
+            }`}
+          />
+        </button>
+      </section>
+      {test ? <TestModeBadge key="on" /> : null}
 
       <SubjectDialog
         open={dialogOpen}

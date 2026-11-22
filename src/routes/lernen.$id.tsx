@@ -2,6 +2,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { QuestionEditor } from "@/components/learn/QuestionEditor";
 import { QuestionView, questionTitle } from "@/components/learn/QuestionView";
 import { Bar, Card, Chip, Page, Spinner, primaryBtn, secondaryBtn } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
@@ -9,6 +10,7 @@ import { aiAvailable, gradeOpenAnswer, type AiResult } from "@/lib/ai-grade.func
 import {
   DIFFICULTY_LABEL,
   buildRound,
+  practiceTypes,
   clozeBlanks,
   emptyAnswer,
   grade,
@@ -78,7 +80,7 @@ function Player({
   ids?: string | undefined;
   onRestart: (mode: Mode) => void;
 }) {
-  const { data, latest, clientId, query } = useLearnData();
+  const { data, states, clientId, query } = useLearnData();
   const queryClient = useQueryClient();
   const [round, setRound] = useState<LQuestion[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -86,6 +88,7 @@ function Player({
   const [revealed, setRevealed] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [saveError, setSaveError] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; result: AiResult | null }>({
     loading: false,
     result: null,
@@ -108,10 +111,11 @@ function Player({
   useEffect(() => {
     if (!data || round || query.isFetching) return;
     const qs = data.questions.filter((q) => q.subject_id === subjectId);
-    const r = buildRound(mode, qs, latest, topicId, ids?.split(","));
+    const subj = data.subjects.find((x) => x.id === subjectId);
+    const r = buildRound(mode, qs, states, topicId, ids?.split(","), practiceTypes(subj));
     setRound(r);
     if (r[0]) setAnswer(emptyAnswer(r[0]));
-  }, [data, latest, round, mode, subjectId, topicId, ids, query.isFetching]);
+  }, [data, states, round, mode, subjectId, topicId, ids, query.isFetching]);
 
   const topicName = useMemo(() => new Map((data?.topics ?? []).map((t) => [t.id, t.name])), [data]);
   const subject = data?.subjects.find((s) => s.id === subjectId);
@@ -141,8 +145,8 @@ function Player({
           <p className="text-lg font-bold">Hier gibt es gerade nichts zu üben.</p>
           <p className="text-sm text-lp-muted">
             {mode === "wiederholen"
-              ? "Alle Fragen sitzen."
-              : "Für diese Auswahl sind noch keine Fragen hinterlegt."}
+              ? "Gerade ist nichts zum Wiederholen dran. Richtig beantwortete Fragen kommen nach ein paar Tagen von selbst wieder."
+              : "Zu dieser Auswahl gibt es keine Fragen. Vielleicht passt der Fragetypen-Filter im Fach nicht dazu."}
           </p>
           <Link to="/fach/$id" params={{ id: subjectId }} className={secondaryBtn}>
             Zurück zum Fach
@@ -287,6 +291,24 @@ function Player({
       {revealed && isOpen && ai.result ? <AiCard result={ai.result} /> : null}
 
       {revealed && !isOpen && current ? <Feedback q={q} score={current.score} /> : null}
+
+      {revealed ? (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="-mt-2 self-start text-[13px] font-semibold text-lp-muted hover:text-lp-sage"
+        >
+          Stimmt etwas nicht? Frage bearbeiten
+        </button>
+      ) : null}
+      {editing ? (
+        <QuestionEditor
+          q={q}
+          onClose={() => setEditing(false)}
+          onSaved={(nq) => setRound((r) => (r ? r.map((x) => (x.id === nq.id ? nq : x)) : r))}
+          onDeleted={() => next()}
+        />
+      ) : null}
 
       {saveError ? (
         <p className="text-xs text-lp-warn-ink">

@@ -1,7 +1,22 @@
 import { createLink } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
-import { forwardRef, type AnchorHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useState, type AnchorHTMLAttributes, type ReactNode } from "react";
+import { isTestMode } from "@/lib/learn";
 import type { CurvePoint } from "@/lib/stats";
+
+/** Hinweis, solange der Testmodus an ist (nur auf diesem Gerät). */
+export function TestModeBadge() {
+  const [on, setOn] = useState(false);
+  useEffect(() => setOn(isTestMode()), []);
+  if (!on) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4">
+      <span className="rounded-full bg-lp-ink px-4 py-2 text-[13px] font-semibold text-lp-bg shadow-lg">
+        Testmodus: Antworten werden nicht gespeichert
+      </span>
+    </div>
+  );
+}
 
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   return (
@@ -13,6 +28,7 @@ export function Page({ children, wide = false }: { children: ReactNode; wide?: b
       >
         {children}
       </main>
+      <TestModeBadge />
     </div>
   );
 }

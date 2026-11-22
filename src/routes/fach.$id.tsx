@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import {
   Back,
   GradeBadge,
@@ -14,8 +15,16 @@ import {
   linkBtn,
 } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
-import { EXAM_SIZE, subjectExams } from "@/lib/exams";
-import { isExamRelevant, progressOf } from "@/lib/learn";
+import { activeExams, examFormat, formatLabel, formatPool } from "@/lib/exams";
+import {
+  QUESTION_TYPES,
+  dueQuestions,
+  isExamRelevant,
+  practiceTypes,
+  progressOf,
+  updateSubjectConfig,
+  type LSubject,
+} from "@/lib/learn";
 import { averageGrade, examSessions, formatGrade, learningCurve, masteryOf } from "@/lib/stats";
 
 export const Route = createFileRoute("/fach/$id")({
@@ -28,7 +37,8 @@ const tile =
 
 function FachSeite() {
   const { id } = Route.useParams();
-  const { data, latest } = useLearnData();
+  const { data, latest, states } = useLearnData();
+  const [formatOpen, setFormatOpen] = useState(false);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -43,7 +53,10 @@ function FachSeite() {
       })
       .filter((t) => t.mastery.total > 0);
     const sessions = examSessions(subject, data.attempts, data.questions);
-    const exams = subjectExams(subject).map((e) => {
+    const types = practiceTypes(subject);
+    const pool = types ? questions.filter((q) => types.includes(q.type)) : questions;
+    const format = examFormat(subject);
+    const exams = activeExams(subject, questions).map((e) => {
       const runs = sessions.filter((s) => s.examId === e.id);
       return { ...e, runs: runs.length, last: runs[0] ?? null };
     });
@@ -55,9 +68,16 @@ function FachSeite() {
       avg: averageGrade(sessions),
       curve: learningCurve(data.attempts, new Set(questions.map((q) => q.id))),
       progress: progressOf(questions, latest),
-      relevant: questions.filter(isExamRelevant).length,
+      relevant: pool.filter(isExamRelevant).length,
+      due: dueQuestions(pool, states).length,
+      types,
+      typeCounts: new Map(
+        QUESTION_TYPES.map(([t]) => [t, questions.filter((q) => q.type === t).length]),
+      ),
+      format,
+      formatCount: formatPool(format, questions).length,
     };
-  }, [data, latest, id]);
+  }, [data, latest, states, id]);
 
   return (
     <Page>
@@ -91,6 +111,8 @@ function FachSeite() {
 
           <LearningCurve points={view.curve} />
 
+          <TypeFilter subject={view.subject} selected={view.types} counts={view.typeCounts} />
+
           <div className="grid grid-cols-2 gap-2">
             {view.relevant > 0 ? (
               <Link to="/lernen/$id" params={{ id }} search={{ mode: "relevant" }} className={tile}>
@@ -108,7 +130,7 @@ function FachSeite() {
                 <span className="text-[13px] text-lp-muted">20 Fragen</span>
               </Link>
             )}
-            {view.progress.wrong > 0 ? (
+            {view.due > 0 ? (
               <Link
                 to="/lernen/$id"
                 params={{ id }}
@@ -117,7 +139,7 @@ function FachSeite() {
               >
                 <span className="text-[15px] font-bold">Wiederholen</span>
                 <span className="text-[13px] text-lp-muted">
-                  {view.progress.wrong} {view.progress.wrong === 1 ? "Frage" : "Fragen"}
+                  {view.due} {view.due === 1 ? "Frage" : "Fragen"}
                 </span>
               </Link>
             ) : (
@@ -138,6 +160,23 @@ function FachSeite() {
             >
               Prüfungen
             </SectionTitle>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[13px] text-lp-muted">
+              <span>{formatLabel(view.format, TYPE_LABEL)}</span>
+              <button
+                type="button"
+                onClick={() => setFormatOpen((v) => !v)}
+                className="font-semibold text-lp-sage hover:text-lp-sage-dark"
+              >
+                {formatOpen ? "Schließen" : "Format ändern"}
+              </button>
+            </div>
+            {formatOpen ? (
+              <FormatEditor
+                subject={view.subject}
+                counts={view.typeCounts}
+                onDone={() => setFormatOpen(false)}
+              />
+            ) : null}
             {view.exams.length === 0 ? (
               <Link
                 to="/pruefung/$id"
@@ -147,7 +186,9 @@ function FachSeite() {
                 <div className="flex flex-1 flex-col gap-0.5">
                   <span className="text-base font-bold">Prüfung schreiben</span>
                   <span className="text-[13px] opacity-85">
-                    {Math.min(EXAM_SIZE, view.progress.total)} gemischte Fragen, Note am Ende
+                    {view.formatCount
+                      ? `${Math.min(view.format.size, view.formatCount)} Fragen, Note am Ende`
+                      : "Zu diesem Format gibt es noch keine Fragen"}
                   </span>
                 </div>
                 <ChevronRight className="size-5" strokeWidth={2.4} />
@@ -218,5 +259,186 @@ function FachSeite() {
         </>
       ) : null}
     </Page>
+  );
+}
+
+const TYPE_LABEL: Record<string, string> = Object.fromEntries(QUESTION_TYPES);
+
+const chip = (on: boolean) =>
+  `inline-flex min-h-9 items-center gap-1.5 rounded-full border-[1.5px] px-3 text-[13px] font-semibold transition-colors ${
+    on
+      ? "border-lp-sage bg-lp-sage-soft text-lp-sage"
+      : "border-lp-line bg-lp-surface text-lp-ink-3 hover:border-lp-sage-line"
+  }`;
+
+/** Welche Fragetypen beim Üben drankommen (gilt für alle Übungsrunden des Fachs). */
+function TypeFilter({
+  subject,
+  selected,
+  counts,
+}: {
+  subject: LSubject;
+  selected: string[] | null;
+  counts: Map<string, number>;
+}) {
+  const queryClient = useQueryClient();
+  const [local, setLocal] = useState<string[] | null>(selected);
+  const available = QUESTION_TYPES.filter(([t]) => (counts.get(t) ?? 0) > 0);
+  if (available.length < 2) return null;
+
+  const save = (next: string[] | null) => {
+    const value = next && next.length && next.length < available.length ? next : null;
+    setLocal(value);
+    updateSubjectConfig(subject.id, { practice_types: value })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["learn"] }))
+      .catch(() => setLocal(selected));
+  };
+  const toggle = (t: string) => {
+    const cur = local ?? [];
+    save(cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]);
+  };
+
+  return (
+    <section className="flex flex-col gap-2">
+      <span className="text-[13px] font-semibold text-lp-ink-3">Beim Üben</span>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          aria-pressed={!local}
+          onClick={() => save(null)}
+          className={chip(!local)}
+        >
+          Alle
+        </button>
+        {available.map(([t, label]) => {
+          const on = Boolean(local?.includes(t));
+          return (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(t)}
+              className={chip(on)}
+            >
+              {label}
+              <span className="text-xs font-normal opacity-70">{counts.get(t)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+const SIZES = [10, 15, 20, 25, 30, 40];
+
+/** Prüfungsformat: welche Fragetypen und wie viele Fragen je Prüfung. */
+function FormatEditor({
+  subject,
+  counts,
+  onDone,
+}: {
+  subject: LSubject;
+  counts: Map<string, number>;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const current = examFormat(subject);
+  const [types, setTypes] = useState<string[] | null>(current.types);
+  const [size, setSize] = useState(current.size);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const available = QUESTION_TYPES.filter(([t]) => (counts.get(t) ?? 0) > 0);
+  const pool = types
+    ? types.reduce((n, t) => n + (counts.get(t) ?? 0), 0)
+    : [...counts.values()].reduce((a, b) => a + b, 0);
+  const examCount = pool === 0 ? 0 : pool <= size ? 1 : Math.max(1, Math.round(pool / size));
+
+  const toggle = (t: string) => {
+    const cur = types ?? [];
+    const next = cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
+    setTypes(next.length && next.length < available.length ? next : null);
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setError(false);
+    try {
+      await updateSubjectConfig(subject.id, { format: { types, size } });
+      await queryClient.invalidateQueries({ queryKey: ["learn"] });
+      onDone();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[22px] border border-lp-line bg-lp-surface p-4">
+      <div className="flex flex-col gap-2">
+        <span className="text-[13px] font-semibold text-lp-ink-3">
+          Fragetypen wie in der echten Prüfung
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            aria-pressed={!types}
+            onClick={() => setTypes(null)}
+            className={chip(!types)}
+          >
+            Alle
+          </button>
+          {available.map(([t, label]) => {
+            const on = Boolean(types?.includes(t));
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(t)}
+                className={chip(on)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-[13px] font-semibold text-lp-ink-3">Fragen je Prüfung</span>
+        <div className="flex flex-wrap gap-1.5">
+          {SIZES.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={size === n}
+              onClick={() => setSize(n)}
+              className={chip(size === n)}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[13px] leading-relaxed text-lp-muted">
+        {pool === 0
+          ? "Zu dieser Auswahl gibt es keine Fragen."
+          : `${pool} passende Fragen ergeben ${examCount} ${examCount === 1 ? "Prüfung" : "Prüfungen"}. Ergebnisse werden je Format getrennt gezählt, frühere bleiben im Verlauf.`}
+      </p>
+      {error ? (
+        <p className="text-[13px] text-lp-warn-ink">
+          Speichern hat nicht geklappt. Bitte noch einmal versuchen.
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={busy || pool === 0}
+        onClick={() => void save()}
+        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-lp-sage px-4 text-sm font-bold text-lp-on-sage hover:bg-lp-sage-dark disabled:bg-lp-line disabled:text-lp-muted"
+      >
+        Format übernehmen
+      </button>
+    </div>
   );
 }

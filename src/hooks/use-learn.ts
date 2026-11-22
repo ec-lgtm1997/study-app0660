@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getClientId, latestScores, loadLearnData } from "@/lib/learn";
+import { getClientId, latestScores, loadLearnData, questionStates } from "@/lib/learn";
 
 /** Geräte-ID erst im Browser bestimmen (kein localStorage beim Server-Rendering). */
 export function useClientId(): string | null {
@@ -17,5 +17,6 @@ export function useLearnData() {
     staleTime: 30_000,
   });
   const latest = useMemo(() => latestScores(query.data?.attempts ?? []), [query.data]);
-  return { clientId, query, data: query.data, latest };
+  const states = useMemo(() => questionStates(query.data?.attempts ?? []), [query.data]);
+  return { clientId, query, data: query.data, latest, states };
 }

@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, Circle, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { QuestionEditor } from "@/components/learn/QuestionEditor";
 import { QuestionView, questionTitle } from "@/components/learn/QuestionView";
 import {
   Back,
@@ -19,8 +20,10 @@ import {
 import { useLearnData } from "@/hooks/use-learn";
 import { aiAvailable, gradeOpenAnswer, type AiResult } from "@/lib/ai-grade.functions";
 import {
-  EXAM_SIZE,
+  activeExams,
+  examFormat,
   examQuestions,
+  formatPool,
   gradeFor,
   subjectExams,
   subjectGrading,
@@ -119,7 +122,13 @@ function ExamPlayer({
   );
 
   const subject = data?.subjects.find((s) => s.id === subjectId);
-  const exam = subjectExams(subject).find((e) => e.id === examId);
+  const subjectQs = useMemo(
+    () => (data?.questions ?? []).filter((q) => q.subject_id === subjectId),
+    [data, subjectId],
+  );
+  const exam = [...activeExams(subject, subjectQs), ...subjectExams(subject)].find(
+    (e) => e.id === examId,
+  );
   const grading = subjectGrading(subject);
   const title = exam ? exam.name : "Zufällige Prüfung";
 
@@ -128,11 +137,13 @@ function ExamPlayer({
   // Prüfung genau einmal zusammenstellen
   useEffect(() => {
     if (!data || questions || query.isFetching) return;
-    const qs = data.questions.filter((q) => q.subject_id === subjectId);
-    const list = exam ? examQuestions(exam, qs) : shuffle(qs).slice(0, EXAM_SIZE);
+    const f = examFormat(subject);
+    const list = exam
+      ? examQuestions(exam, subjectQs)
+      : shuffle(formatPool(f, subjectQs)).slice(0, f.size);
     setQuestions(list);
     setAnswers(list.map(emptyAnswer));
-  }, [data, questions, query.isFetching, subjectId, exam]);
+  }, [data, questions, query.isFetching, subject, subjectQs, exam]);
 
   if (!data || !questions) {
     return (
@@ -740,8 +751,14 @@ function ExamReview({
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("alle");
   const [marked, setMarked] = useState<Set<string>>(new Set());
+  const [edited, setEdited] = useState<Map<string, LQuestion>>(new Map());
+  const [editing, setEditing] = useState<LQuestion | null>(null);
 
-  const items = questions.map((q, i) => ({ q, i, score: scores[i] ?? 0 }));
+  const items = questions.map((orig, i) => ({
+    q: edited.get(orig.id) ?? orig,
+    i,
+    score: scores[i] ?? 0,
+  }));
   const wrong = items.filter((x) => x.score < 1);
   const right = items.filter((x) => x.score >= 1);
   const shown = filter === "falsch" ? wrong : filter === "richtig" ? right : items;
@@ -848,9 +865,23 @@ function ExamReview({
             >
               {marked.has(q.id) ? "Zum Wiederholen vorgemerkt" : "Später wiederholen"}
             </button>
+            <button
+              type="button"
+              onClick={() => setEditing(q)}
+              className="-mt-1 self-start text-[13px] font-semibold text-lp-muted hover:text-lp-sage"
+            >
+              Stimmt etwas nicht? Frage bearbeiten
+            </button>
           </Card>
         );
       })}
+      {editing ? (
+        <QuestionEditor
+          q={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(nq) => setEdited((m) => new Map(m).set(nq.id, nq))}
+        />
+      ) : null}
     </Page>
   );
 }
@@ -871,8 +902,10 @@ function PastExam({ subjectId, sessionId }: { subjectId: string; sessionId: stri
     );
     if (!session) return null;
     const byQ = new Map(session.attempts.map((a) => [a.question_id, a]));
-    const exam = subjectExams(subject).find((e) => e.id === session.examId);
     const subjectQs = data.questions.filter((q) => q.subject_id === subjectId);
+    const exam = [...subjectExams(subject), ...activeExams(subject, subjectQs)].find(
+      (e) => e.id === session.examId,
+    );
     const qById = new Map(subjectQs.map((q) => [q.id, q]));
     const ordered = exam
       ? examQuestions(exam, subjectQs).filter((q) => byQ.has(q.id))

@@ -1,4 +1,4 @@
-import { gradeFor, subjectExams, subjectGrading, type GradeStep } from "./exams";
+import { activeExams, gradeFor, subjectExams, subjectGrading, type GradeStep } from "./exams";
 import type { LAttempt, LQuestion, LSubject, LTopic } from "./learn";
 
 /* Auswertungen über alle gespeicherten Ergebnisse (geräteübergreifend). */
@@ -53,8 +53,11 @@ export function examSessions(
   attempts: LAttempt[],
   questions: LQuestion[],
 ): ExamSession[] {
-  const own = new Set(questions.filter((q) => q.subject_id === subject.id).map((q) => q.id));
-  const names = new Map(subjectExams(subject).map((e) => [e.id, e.name]));
+  const ownQs = questions.filter((q) => q.subject_id === subject.id);
+  const own = new Set(ownQs.map((q) => q.id));
+  const names = new Map(
+    [...subjectExams(subject), ...activeExams(subject, ownQs)].map((e) => [e.id, e.name]),
+  );
   const grading = subjectGrading(subject);
   const map = new Map<string, LAttempt[]>();
   for (const a of attempts) {

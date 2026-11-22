@@ -3,10 +3,11 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { QuestionRow } from "@/components/QuestionRow";
-import { QuestionDialog } from "@/components/QuestionDialog";
+import { QuestionEditor } from "@/components/learn/QuestionEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { createQuestion, deleteQuestion, getTopic, listQuestions, listTopics } from "@/lib/db";
-import type { Json, Question } from "@/lib/models";
+import { deleteQuestion, getTopic, listQuestions } from "@/lib/db";
+import type { LQuestion } from "@/lib/learn";
+import type { Question } from "@/lib/models";
 
 export const Route = createFileRoute("/admin/fach/$id/thema/$topicId")({
   head: () => ({
@@ -25,25 +26,15 @@ function ThemaSeite() {
   const queryClient = useQueryClient();
 
   const topic = useQuery({ queryKey: ["topic", topicId], queryFn: () => getTopic(topicId) });
-  const topics = useQuery({ queryKey: ["topics", id], queryFn: () => listTopics(id) });
   const questions = useQuery({
     queryKey: ["questions", topicId],
     queryFn: () => listQuestions({ topicId }),
   });
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState<Question | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["questions", topicId] });
-
-  const save = useMutation({
-    mutationFn: (input: { topic_id: string | null; type: string; content: Json; solution: Json }) =>
-      createQuestion({ ...input, subject_id: id }),
-    onSuccess: () => {
-      setDialogOpen(false);
-      refresh();
-    },
-  });
 
   const remove = useMutation({
     mutationFn: (questionId: string) => deleteQuestion(questionId),
@@ -54,18 +45,20 @@ function ThemaSeite() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+    <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-8 font-lp text-lp-ink sm:px-6">
       <Link
         to="/admin/fach/$id"
         params={{ id }}
         className="text-sm text-muted-foreground hover:text-primary"
       >
-        ← Zurück zum Fach
+        ‹ Zurück zum Fach
       </Link>
 
       <header className="mt-4 mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">{topic.data?.name ?? "Themengebiet"}</h1>
-        <Button onClick={() => setDialogOpen(true)}>Frage hinzufügen</Button>
+        <Button variant="outline" asChild>
+          <Link to="/hinzufuegen">Fragen hinzufügen</Link>
+        </Button>
       </header>
 
       {questions.data?.length === 0 ? (
@@ -73,18 +66,24 @@ function ThemaSeite() {
       ) : (
         <ul className="divide-y rounded-lg border">
           {(questions.data ?? []).map((question) => (
-            <QuestionRow key={question.id} question={question} onDelete={setDeleting} />
+            <QuestionRow
+              key={question.id}
+              question={question}
+              onEdit={setEditing}
+              onDelete={setDeleting}
+            />
           ))}
         </ul>
       )}
 
-      <QuestionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        topics={topics.data ?? []}
-        defaultTopicId={topicId}
-        onSubmit={(input) => save.mutate(input)}
-      />
+      {editing ? (
+        <QuestionEditor
+          q={editing as unknown as LQuestion}
+          onClose={() => setEditing(null)}
+          onSaved={() => void refresh()}
+          onDeleted={() => void refresh()}
+        />
+      ) : null}
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}

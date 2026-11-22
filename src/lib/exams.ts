@@ -68,6 +68,7 @@ export function gradeFor(pct: number, grading: GradeStep[]): GradeStep {
 export function examQuestions(exam: ExamDef, subjectQuestions: LQuestion[]): LQuestion[] {
   const bySource = new Map<string, LQuestion>();
   for (const q of subjectQuestions) {
+    bySource.set(q.id, q);
     const sid = q.content.meta?.source_id;
     if (sid) bySource.set(sid, q);
   }
@@ -93,4 +94,73 @@ export function examRuns(attempts: LAttempt[], examId: string): ExamRun[] {
   return [...sessions.values()]
     .map((s) => ({ pct: Math.round((s.sum / s.n) * 100), at: s.at }))
     .sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/* ------------------------------------------------------------------ */
+/* Prüfungsformat (z. B. nur offene Fragen, 10 Fragen je Prüfung)       */
+/* ------------------------------------------------------------------ */
+
+export interface ExamFormat {
+  /** null = alle Fragetypen */
+  types: string[] | null;
+  size: number;
+}
+
+export function examFormat(subject: LSubject | undefined): ExamFormat {
+  const cfg = (isObj(subject?.exam_config) ? subject?.exam_config : {}) as { format?: unknown };
+  const f = isObj(cfg.format) ? cfg.format : {};
+  const types = Array.isArray(f["types"])
+    ? (f["types"] as unknown[]).filter((t): t is string => typeof t === "string")
+    : [];
+  const size = typeof f["size"] === "number" && f["size"] > 0 ? f["size"] : EXAM_SIZE;
+  return { types: types.length ? types : null, size };
+}
+
+const isDefault = (f: ExamFormat) => f.types === null && f.size === EXAM_SIZE;
+
+/** Fragen, die zum Format passen. */
+export function formatPool(f: ExamFormat, questions: LQuestion[]): LQuestion[] {
+  const types = f.types;
+  return types ? questions.filter((q) => types.includes(q.type)) : questions;
+}
+
+/**
+ * Die Prüfungen, die gerade gelten: im Standardformat die festen Prüfungen aus der Importdatei,
+ * sonst feste, ausgewogene Prüfungen aus allen passenden Fragen.
+ */
+export function activeExams(
+  subject: LSubject | undefined,
+  subjectQuestions: LQuestion[],
+): ExamDef[] {
+  const f = examFormat(subject);
+  if (isDefault(f)) return subjectExams(subject);
+  const pool = formatPool(f, subjectQuestions);
+  if (!pool.length) return [];
+  const k = pool.length <= f.size ? 1 : Math.max(1, Math.round(pool.length / f.size));
+  const key = `${(f.types ?? ["alle"]).slice().sort().join("+")}-${f.size}`;
+  const diff = (q: LQuestion) => q.content.meta?.difficulty ?? 2;
+  const sorted = pool
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.topic_id ?? "").localeCompare(b.topic_id ?? "") ||
+        diff(a) - diff(b) ||
+        (a.content.meta?.source_id ?? a.id).localeCompare(b.content.meta?.source_id ?? b.id),
+    );
+  const groups: string[][] = Array.from({ length: k }, () => []);
+  sorted.forEach((q, i) => {
+    const round = Math.floor(i / k);
+    const pos = i % k;
+    groups[round % 2 === 0 ? pos : k - 1 - pos]?.push(q.content.meta?.source_id ?? q.id);
+  });
+  return groups.map((qs, i) => ({
+    id: `${key}-${i + 1}`,
+    name: `Prüfung ${i + 1}`,
+    questions: qs,
+  }));
+}
+
+export function formatLabel(f: ExamFormat, labels: Record<string, string>): string {
+  const t = f.types ? f.types.map((x) => labels[x] ?? x).join(", ") : "Alle Fragetypen";
+  return `${t}, ${f.size} Fragen`;
 }

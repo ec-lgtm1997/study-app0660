@@ -80,7 +80,10 @@ const idsOf = (list: unknown): string[] | null =>
     : null;
 
 /** Was an einer einzelnen Frage nicht stimmt (null = alles gut). */
-function checkQuestion(q: Record<string, unknown>, hasFallbackTopic: boolean): string | null {
+export function checkQuestion(
+  q: Record<string, unknown>,
+  hasFallbackTopic: boolean,
+): string | null {
   if (!isStr(q["id"])) return "„id“ fehlt";
   const type = q["type"];
   if (!TYPES.includes(type as (typeof TYPES)[number]))

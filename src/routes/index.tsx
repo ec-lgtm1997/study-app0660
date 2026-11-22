@@ -3,8 +3,8 @@ import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Card, Page, Ring, SectionTitle, Spinner, softBtn } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
-import { subjectExams } from "@/lib/exams";
-import { progressOf } from "@/lib/learn";
+import { activeExams } from "@/lib/exams";
+import { dueQuestions, practiceTypes, progressOf } from "@/lib/learn";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Lernplattform" }] }),
@@ -21,7 +21,7 @@ function useGreeting() {
 }
 
 function Startseite() {
-  const { data, latest, query } = useLearnData();
+  const { data, latest, states, query } = useLearnData();
   const greeting = useGreeting();
 
   const subjects = useMemo(() => {
@@ -29,10 +29,17 @@ function Startseite() {
     return data.subjects
       .map((s) => {
         const qs = data.questions.filter((q) => q.subject_id === s.id);
-        return { ...s, examCount: subjectExams(s).length, progress: progressOf(qs, latest) };
+        const types = practiceTypes(s);
+        const pool = types ? qs.filter((q) => types.includes(q.type)) : qs;
+        return {
+          ...s,
+          examCount: activeExams(s, qs).length,
+          progress: progressOf(qs, latest),
+          due: dueQuestions(pool, states).length,
+        };
       })
       .filter((s) => s.progress.total > 0);
-  }, [data, latest]);
+  }, [data, latest, states]);
 
   const last = useMemo(() => {
     if (!data) return null;
@@ -46,10 +53,7 @@ function Startseite() {
   }, [data, latest]);
 
   const repeat = useMemo(
-    () =>
-      subjects
-        .filter((s) => s.progress.wrong > 0)
-        .sort((a, b) => b.progress.wrong - a.progress.wrong)[0] ?? null,
+    () => subjects.filter((s) => s.due > 0).sort((a, b) => b.due - a.due)[0] ?? null,
     [subjects],
   );
 
@@ -154,8 +158,7 @@ function Startseite() {
         <Card className="flex items-center gap-3">
           <div className="flex flex-1 flex-col gap-0.5">
             <span className="text-[15px] font-bold">
-              {repeat.progress.wrong} {repeat.progress.wrong === 1 ? "Frage" : "Fragen"} zum
-              Wiederholen
+              {repeat.due} {repeat.due === 1 ? "Frage" : "Fragen"} zum Wiederholen
             </span>
             <span className="text-[13px] text-lp-muted">{repeat.name}</span>
           </div>

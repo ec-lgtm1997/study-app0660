@@ -159,6 +159,7 @@ export async function saveAttempt(input: {
   mode: string;
   extraMeta?: Record<string, unknown> | undefined;
 }) {
+  if (isTestMode()) return;
   const { error } = await supabase.from("attempts").insert({
     question_id: input.questionId,
     client_id: input.clientId,
@@ -229,53 +230,167 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Neue Fragen zuerst, dann falsch beantwortete, dann bereits sichere. */
-function prioritized(questions: LQuestion[], latest: Map<string, number>): LQuestion[] {
-  const fresh: LQuestion[] = [];
-  const wrong: LQuestion[] = [];
-  const known: LQuestion[] = [];
-  for (const q of questions) {
-    const s = latest.get(q.id);
-    if (s === undefined) fresh.push(q);
-    else if (s < 1) wrong.push(q);
-    else known.push(q);
-  }
-  return [...shuffle(fresh), ...shuffle(wrong), ...shuffle(known)];
+/* Wiederholen nach Abständen: jede richtige Antwort in Folge verlängert die Pause. */
+export interface QState {
+  /** letztes Ergebnis 0 … 1 */
+  last: number;
+  /** Zeitpunkt der letzten Antwort */
+  at: string;
+  /** richtige Antworten in Folge (am Ende) */
+  streak: number;
 }
+
+/** Tage bis zur nächsten Wiederholung, je nach Anzahl richtiger Antworten in Folge. */
+const INTERVAL_DAYS = [0, 1, 3, 7, 16, 35];
+
+export function questionStates(attempts: LAttempt[]): Map<string, QState> {
+  const m = new Map<string, QState>();
+  for (const a of attempts) {
+    if (!a.question_id || a.score === null) continue;
+    const score = Number(a.score);
+    const prev = m.get(a.question_id);
+    m.set(a.question_id, {
+      last: score,
+      at: a.created_at,
+      streak: score >= 1 ? (prev?.streak ?? 0) + 1 : 0,
+    });
+  }
+  return m;
+}
+
+/** Fällig = zuletzt falsch oder die Pause seit der letzten richtigen Antwort ist um. */
+export function isDue(s: QState | undefined, now = Date.now()): boolean {
+  if (!s) return false;
+  if (s.last < 1) return true;
+  const days = INTERVAL_DAYS[Math.min(s.streak, INTERVAL_DAYS.length - 1)] ?? 35;
+  // zwei Stunden Spielraum, damit „morgen früh“ schon zählt
+  return now - Date.parse(s.at) >= days * 864e5 - 2 * 3600e3;
+}
+
+export function dueQuestions(questions: LQuestion[], states: Map<string, QState>): LQuestion[] {
+  const now = Date.now();
+  return questions.filter((q) => isDue(states.get(q.id), now));
+}
+
+/** Neue Fragen zuerst, dann fällige, dann die, deren Pause noch läuft. */
+function prioritized(questions: LQuestion[], states: Map<string, QState>): LQuestion[] {
+  const now = Date.now();
+  const fresh: LQuestion[] = [];
+  const due: LQuestion[] = [];
+  const later: LQuestion[] = [];
+  for (const q of questions) {
+    const s = states.get(q.id);
+    if (!s) fresh.push(q);
+    else if (isDue(s, now)) due.push(q);
+    else later.push(q);
+  }
+  return [...shuffle(fresh), ...shuffle(due), ...shuffle(later)];
+}
+
+/** Fragetypen, die es gibt (Reihenfolge für Filter und Anzeige). */
+export const QUESTION_TYPES = [
+  ["multiple_choice", "Multiple Choice"],
+  ["matching", "Zuordnung"],
+  ["ordering", "Reihenfolge"],
+  ["cloze", "Lückentext"],
+  ["open", "Offen"],
+] as const;
 
 export function buildRound(
   mode: Mode,
   subjectQuestions: LQuestion[],
-  latest: Map<string, number>,
+  states: Map<string, QState>,
   topicId?: string,
   ids?: string[],
+  types?: string[] | null,
 ): LQuestion[] {
+  if (mode === "auswahl") {
+    const set = new Set(ids ?? []);
+    return prioritized(
+      subjectQuestions.filter((q) => set.has(q.id)),
+      states,
+    ).slice(0, ROUND_SIZE);
+  }
+  const pool = types?.length
+    ? subjectQuestions.filter((q) => types.includes(q.type))
+    : subjectQuestions;
   switch (mode) {
-    case "auswahl": {
-      const set = new Set(ids ?? []);
-      return prioritized(
-        subjectQuestions.filter((q) => set.has(q.id)),
-        latest,
-      ).slice(0, ROUND_SIZE);
-    }
     case "thema":
       return prioritized(
-        subjectQuestions.filter((q) => q.topic_id === topicId),
-        latest,
+        pool.filter((q) => q.topic_id === topicId),
+        states,
       ).slice(0, ROUND_SIZE);
     case "relevant":
-      return prioritized(subjectQuestions.filter(isExamRelevant), latest).slice(0, ROUND_SIZE);
+      return prioritized(pool.filter(isExamRelevant), states).slice(0, ROUND_SIZE);
     case "wiederholen":
-      return shuffle(
-        subjectQuestions.filter((q) => {
-          const s = latest.get(q.id);
-          return s !== undefined && s < 1;
-        }),
-      ).slice(0, ROUND_SIZE);
+      return shuffle(dueQuestions(pool, states)).slice(0, ROUND_SIZE);
     case "simulation":
     default:
-      return shuffle(subjectQuestions).slice(0, ROUND_SIZE);
+      return shuffle(pool).slice(0, ROUND_SIZE);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Testmodus: Antworten werden nicht gespeichert (zum Ausprobieren)     */
+/* ------------------------------------------------------------------ */
+
+const TEST_KEY = "lernplattform.testmodus";
+
+export function isTestMode(): boolean {
+  try {
+    return window.localStorage.getItem(TEST_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setTestMode(on: boolean) {
+  try {
+    if (on) window.localStorage.setItem(TEST_KEY, "1");
+    else window.localStorage.removeItem(TEST_KEY);
+  } catch {
+    // ohne Speicher kein Testmodus
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Einstellungen am Fach (zentral gespeichert in exam_config)           */
+/* ------------------------------------------------------------------ */
+
+export async function updateSubjectConfig(subjectId: string, patch: Record<string, unknown>) {
+  const cur = await supabase.from("subjects").select("exam_config").eq("id", subjectId).single();
+  if (cur.error) throw new Error(cur.error.message);
+  const prev = ((cur.data as { exam_config: Record<string, unknown> | null }).exam_config ??
+    {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from("subjects")
+    .update({ exam_config: { ...prev, ...patch } } as never)
+    .eq("id", subjectId);
+  if (error) throw new Error(error.message);
+}
+
+export function practiceTypes(subject: LSubject | undefined): string[] | null {
+  const cfg = subject?.exam_config as { practice_types?: unknown } | null | undefined;
+  const t = cfg?.practice_types;
+  return Array.isArray(t) && t.length ? t.filter((x): x is string => typeof x === "string") : null;
+}
+
+/** Frage nach einer Korrektur speichern (Metadaten bleiben erhalten). */
+export async function updateQuestion(
+  q: LQuestion,
+  content: LQuestion["content"],
+  solution: LQuestion["solution"],
+) {
+  const { error } = await supabase
+    .from("questions")
+    .update({ content: { ...content, meta: q.content.meta }, solution } as never)
+    .eq("id", q.id);
+  if (error) throw new Error(error.message);
+}
+
+export async function removeQuestion(id: string) {
+  const { error } = await supabase.from("questions").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 /* ------------------------------------------------------------------ */
@@ -399,7 +514,7 @@ export async function saveAttempts(
   clientId: string,
   sessionId: string,
 ) {
-  if (!rows.length) return;
+  if (!rows.length || isTestMode()) return;
   const { error } = await supabase.from("attempts").insert(
     rows.map((r) => ({
       question_id: r.questionId,
