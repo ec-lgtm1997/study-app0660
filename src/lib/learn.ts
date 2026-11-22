@@ -58,6 +58,7 @@ export interface LTopic {
 
 export interface LAttempt {
   question_id: string | null;
+  answer?: unknown;
   score: number | null;
   created_at: string;
   session_id: string | null;
@@ -72,7 +73,7 @@ export interface LearnData {
 }
 
 /* ------------------------------------------------------------------ */
-/* Geräte-ID (kein Login: Fortschritt wird pro Gerät gespeichert)      */
+/* Geräte-ID (nur zur Herkunft; Ergebnisse gelten geräteübergreifend) */
 /* ------------------------------------------------------------------ */
 
 const CLIENT_KEY = "lernplattform.client_id";
@@ -113,7 +114,8 @@ async function fetchAll<T>(
   }
 }
 
-export async function loadLearnData(clientId: string): Promise<LearnData> {
+// Alle Ergebnisse werden zentral gespeichert: auf jedem Gerät derselbe Stand.
+export async function loadLearnData(): Promise<LearnData> {
   const [subjects, topics, questions, attempts] = await Promise.all([
     fetchAll<LSubject>((a, b) =>
       supabase
@@ -140,8 +142,7 @@ export async function loadLearnData(clientId: string): Promise<LearnData> {
     fetchAll<LAttempt>((a, b) =>
       supabase
         .from("attempts")
-        .select("question_id, score, created_at, session_id, meta")
-        .eq("client_id", clientId)
+        .select("question_id, score, created_at, session_id, meta, answer")
         .order("created_at")
         .range(a, b),
     ),
@@ -214,7 +215,7 @@ export const isExamRelevant = (q: LQuestion) => q.content.meta?.exam_relevant ==
 /* Runden zusammenstellen                                              */
 /* ------------------------------------------------------------------ */
 
-export type Mode = "thema" | "simulation" | "relevant" | "wiederholen";
+export type Mode = "thema" | "simulation" | "relevant" | "wiederholen" | "auswahl";
 export const ROUND_SIZE = 20;
 
 function shuffle<T>(arr: T[]): T[] {
@@ -247,8 +248,16 @@ export function buildRound(
   subjectQuestions: LQuestion[],
   latest: Map<string, number>,
   topicId?: string,
+  ids?: string[],
 ): LQuestion[] {
   switch (mode) {
+    case "auswahl": {
+      const set = new Set(ids ?? []);
+      return prioritized(
+        subjectQuestions.filter((q) => set.has(q.id)),
+        latest,
+      ).slice(0, ROUND_SIZE);
+    }
     case "thema":
       return prioritized(
         subjectQuestions.filter((q) => q.topic_id === topicId),
@@ -359,6 +368,18 @@ export function grade(q: LQuestion, a: Answer): number {
     case "open":
       return 0;
   }
+}
+
+/** Frage für später vormerken: zählt bis zur nächsten richtigen Antwort als „wiederholen“. */
+export async function markForRepeat(questionId: string, clientId: string) {
+  await saveAttempt({
+    questionId,
+    clientId,
+    sessionId: crypto.randomUUID(),
+    answer: null,
+    score: 0,
+    mode: "merken",
+  });
 }
 
 export const DIFFICULTY_LABEL: Record<number, string> = {

@@ -12,9 +12,8 @@ export function useClientId(): string | null {
 export function useLearnData() {
   const clientId = useClientId();
   const query = useQuery({
-    queryKey: ["learn", clientId],
-    queryFn: () => loadLearnData(clientId as string),
-    enabled: clientId !== null,
+    queryKey: ["learn"],
+    queryFn: () => loadLearnData(),
     staleTime: 30_000,
   });
   const latest = useMemo(() => latestScores(query.data?.attempts ?? []), [query.data]);

@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { QuestionView, questionTitle } from "@/components/learn/QuestionView";
 import { Bar, Card, Chip, Page, Spinner, primaryBtn, secondaryBtn } from "@/components/learn/ui";
@@ -21,17 +21,19 @@ import {
   type Mode,
 } from "@/lib/learn";
 
-const MODES: Mode[] = ["thema", "simulation", "relevant", "wiederholen"];
+const MODES: Mode[] = ["thema", "simulation", "relevant", "wiederholen", "auswahl"];
 
 interface Search {
   mode: Mode;
   topic?: string | undefined;
+  ids?: string | undefined;
 }
 
 export const Route = createFileRoute("/lernen/$id")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     mode: MODES.includes(s["mode"] as Mode) ? (s["mode"] as Mode) : "simulation",
     topic: typeof s["topic"] === "string" ? s["topic"] : undefined,
+    ids: typeof s["ids"] === "string" ? s["ids"] : undefined,
   }),
   head: () => ({ meta: [{ title: "Lernen — Lernplattform" }] }),
   component: LernenSeite,
@@ -52,6 +54,7 @@ function LernenSeite() {
       subjectId={id}
       mode={search.mode}
       topicId={search.topic}
+      ids={search.ids}
       onRestart={restart}
     />
   );
@@ -66,11 +69,13 @@ function Player({
   subjectId,
   mode,
   topicId,
+  ids,
   onRestart,
 }: {
   subjectId: string;
   mode: Mode;
   topicId?: string | undefined;
+  ids?: string | undefined;
   onRestart: (mode: Mode) => void;
 }) {
   const { data, latest, clientId, query } = useLearnData();
@@ -103,10 +108,10 @@ function Player({
   useEffect(() => {
     if (!data || round || query.isFetching) return;
     const qs = data.questions.filter((q) => q.subject_id === subjectId);
-    const r = buildRound(mode, qs, latest, topicId);
+    const r = buildRound(mode, qs, latest, topicId, ids?.split(","));
     setRound(r);
     if (r[0]) setAnswer(emptyAnswer(r[0]));
-  }, [data, latest, round, mode, subjectId, topicId, query.isFetching]);
+  }, [data, latest, round, mode, subjectId, topicId, ids, query.isFetching]);
 
   const topicName = useMemo(() => new Map((data?.topics ?? []).map((t) => [t.id, t.name])), [data]);
   const subject = data?.subjects.find((s) => s.id === subjectId);
@@ -117,7 +122,9 @@ function Player({
         ? "Prüfungssimulation"
         : mode === "relevant"
           ? "Prüfungsrelevant"
-          : "Wiederholen";
+          : mode === "auswahl"
+            ? "Gezielt üben"
+            : "Wiederholen";
 
   if (!data || !round) {
     return (
@@ -134,7 +141,7 @@ function Player({
           <p className="text-lg font-bold">Hier gibt es gerade nichts zu üben.</p>
           <p className="text-sm text-lp-muted">
             {mode === "wiederholen"
-              ? "Alle Fragen sitzen – stark!"
+              ? "Alle Fragen sitzen."
               : "Für diese Auswahl sind noch keine Fragen hinterlegt."}
           </p>
           <Link to="/fach/$id" params={{ id: subjectId }} className={secondaryBtn}>
@@ -305,14 +312,14 @@ function Player({
               <button
                 type="button"
                 onClick={() => rate(0.5)}
-                className={`min-h-[52px] rounded-[14px] border-[1.5px] border-[#9aa6a2] bg-lp-surface text-sm font-bold text-lp-ink-2 hover:bg-lp-bg${suggested("partial")}`}
+                className={`min-h-[52px] rounded-[14px] border-[1.5px] border-lp-line bg-lp-surface text-sm font-bold text-lp-ink-2 hover:bg-lp-bg${suggested("partial")}`}
               >
                 Teilweise
               </button>
               <button
                 type="button"
                 onClick={() => rate(1)}
-                className={`min-h-[52px] rounded-[14px] bg-lp-sage text-sm font-bold text-white hover:bg-lp-sage-dark${suggested("correct")}`}
+                className={`min-h-[52px] rounded-[14px] bg-lp-sage text-sm font-bold text-lp-on-sage hover:bg-lp-sage-dark${suggested("correct")}`}
               >
                 Richtig
               </button>
@@ -330,8 +337,7 @@ function Player({
               disabled={ai.loading}
               className={`${primaryBtn} gap-2`}
             >
-              <Sparkles className="size-[18px]" strokeWidth={2.2} />
-              {ai.loading ? "Antwort wird geprüft …" : "Antwort prüfen lassen"}
+              {ai.loading ? "Wird ausgewertet …" : "Antwort auswerten"}
             </button>
             <button
               type="button"
@@ -377,10 +383,8 @@ function AiCard({ result }: { result: AiResult }) {
   if (!result.ok) {
     const msg =
       result.reason === "limit"
-        ? "Die KI macht gerade eine kurze Pause (Tageslimit erreicht). Vergleiche selbst mit den Kernpunkten."
-        : result.reason === "not_configured"
-          ? "Die KI-Prüfung ist noch nicht eingerichtet. Vergleiche selbst mit den Kernpunkten."
-          : "Die KI war gerade nicht erreichbar. Vergleiche selbst mit den Kernpunkten.";
+        ? "Die Auswertung ist für heute ausgeschöpft. Vergleiche selbst mit den Kernpunkten."
+        : "Die Auswertung ist gerade nicht möglich. Vergleiche selbst mit den Kernpunkten.";
     return <p className="text-sm text-lp-muted">{msg}</p>;
   }
   const label =
@@ -389,18 +393,16 @@ function AiCard({ result }: { result: AiResult }) {
       : result.grade === "partial"
         ? "Teilweise richtig"
         : "Noch nicht ganz";
-  const color = result.grade === "correct" ? "text-lp-sage" : "text-lp-warn-ink";
+  const color = result.grade === "correct" ? "text-lp-good" : "text-lp-warn-ink";
   return (
     <div className="flex flex-col gap-1.5 rounded-[18px] border border-lp-line bg-lp-surface p-4">
-      <span className="flex items-center gap-2 text-[13px] font-extrabold uppercase tracking-[0.06em] text-lp-ink-3">
-        <Sparkles className="size-4" strokeWidth={2.2} /> KI-Einschätzung
-      </span>
+      <span className="text-[13px] font-bold text-lp-ink-3">Auswertung</span>
       <span className={`text-[17px] font-extrabold ${color}`}>{label}</span>
       {result.feedback ? (
         <p className="text-sm leading-relaxed text-lp-ink-2">{result.feedback}</p>
       ) : null}
       <span className="text-xs text-lp-muted">
-        Die KI kann sich irren – du entscheidest unten selbst.
+        Du entscheidest unten selbst, wie du es wertest.
       </span>
     </div>
   );
@@ -408,7 +410,7 @@ function AiCard({ result }: { result: AiResult }) {
 
 function Feedback({ q, score }: { q: LQuestion; score: number }) {
   const label = score === 1 ? "Richtig!" : score > 0 ? "Teilweise richtig" : "Nicht ganz";
-  const color = score === 1 ? "text-lp-sage" : "text-lp-warn-ink";
+  const color = score === 1 ? "text-lp-good" : "text-lp-warn-ink";
   return (
     <div className="flex flex-col gap-1.5 rounded-[18px] border border-lp-line bg-lp-surface p-4">
       <span className={`text-[15px] font-extrabold ${color}`}>{label}</span>

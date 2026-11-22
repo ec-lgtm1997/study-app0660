@@ -10,16 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HinzufuegenRouteImport } from './routes/hinzufuegen'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as FachIdRouteImport } from './routes/fach.$id'
 import { Route as LernenIdRouteImport } from './routes/lernen.$id'
 import { Route as PruefungIdRouteImport } from './routes/pruefung.$id'
+import { Route as VerlaufIdRouteImport } from './routes/verlauf.$id'
 import { Route as AdminFachIdIndexRouteImport } from './routes/admin.fach.$id.index'
 import { Route as AdminFachIdThemaTopicIdRouteImport } from './routes/admin.fach.$id.thema.$topicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HinzufuegenRoute = HinzufuegenRouteImport.update({
+  id: '/hinzufuegen',
+  path: '/hinzufuegen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -42,6 +49,11 @@ const PruefungIdRoute = PruefungIdRouteImport.update({
   path: '/pruefung/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerlaufIdRoute = VerlaufIdRouteImport.update({
+  id: '/verlauf/$id',
+  path: '/verlauf/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminFachIdIndexRoute = AdminFachIdIndexRouteImport.update({
   id: '/admin/fach/$id/',
   path: '/admin/fach/$id/',
@@ -55,18 +67,22 @@ const AdminFachIdThemaTopicIdRoute = AdminFachIdThemaTopicIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/hinzufuegen': typeof HinzufuegenRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
   '/pruefung/$id': typeof PruefungIdRoute
+  '/verlauf/$id': typeof VerlaufIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/fach/$id/': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/hinzufuegen': typeof HinzufuegenRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
   '/pruefung/$id': typeof PruefungIdRoute
+  '/verlauf/$id': typeof VerlaufIdRoute
   '/admin': typeof AdminIndexRoute
   '/admin/fach/$id': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
@@ -74,9 +90,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/hinzufuegen': typeof HinzufuegenRoute
   '/fach/$id': typeof FachIdRoute
   '/lernen/$id': typeof LernenIdRoute
   '/pruefung/$id': typeof PruefungIdRoute
+  '/verlauf/$id': typeof VerlaufIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/fach/$id/': typeof AdminFachIdIndexRoute
   '/admin/fach/$id/thema/$topicId': typeof AdminFachIdThemaTopicIdRoute
@@ -85,27 +103,33 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/hinzufuegen'
     | '/fach/$id'
     | '/lernen/$id'
     | '/pruefung/$id'
+    | '/verlauf/$id'
     | '/admin/'
     | '/admin/fach/$id/'
     | '/admin/fach/$id/thema/$topicId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/hinzufuegen'
     | '/fach/$id'
     | '/lernen/$id'
     | '/pruefung/$id'
+    | '/verlauf/$id'
     | '/admin'
     | '/admin/fach/$id'
     | '/admin/fach/$id/thema/$topicId'
   id:
     | '__root__'
     | '/'
+    | '/hinzufuegen'
     | '/fach/$id'
     | '/lernen/$id'
     | '/pruefung/$id'
+    | '/verlauf/$id'
     | '/admin/'
     | '/admin/fach/$id/'
     | '/admin/fach/$id/thema/$topicId'
@@ -113,9 +137,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HinzufuegenRoute: typeof HinzufuegenRoute
   FachIdRoute: typeof FachIdRoute
   LernenIdRoute: typeof LernenIdRoute
   PruefungIdRoute: typeof PruefungIdRoute
+  VerlaufIdRoute: typeof VerlaufIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminFachIdIndexRoute: typeof AdminFachIdIndexRoute
   AdminFachIdThemaTopicIdRoute: typeof AdminFachIdThemaTopicIdRoute
@@ -128,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hinzufuegen': {
+      id: '/hinzufuegen'
+      path: '/hinzufuegen'
+      fullPath: '/hinzufuegen'
+      preLoaderRoute: typeof HinzufuegenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -158,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PruefungIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verlauf/$id': {
+      id: '/verlauf/$id'
+      path: '/verlauf/$id'
+      fullPath: '/verlauf/$id'
+      preLoaderRoute: typeof VerlaufIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/fach/$id/': {
       id: '/admin/fach/$id/'
       path: '/admin/fach/$id'
@@ -177,9 +217,11 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HinzufuegenRoute: HinzufuegenRoute,
   FachIdRoute: FachIdRoute,
   LernenIdRoute: LernenIdRoute,
   PruefungIdRoute: PruefungIdRoute,
+  VerlaufIdRoute: VerlaufIdRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminFachIdIndexRoute: AdminFachIdIndexRoute,
   AdminFachIdThemaTopicIdRoute: AdminFachIdThemaTopicIdRoute,

@@ -8,7 +8,7 @@ interface Props {
   onChange: (a: Answer) => void;
   /** true = Lösung wird angezeigt (Feedback-Zustand) */
   revealed: boolean;
-  /** Von der KI als getroffen erkannte Kernpunkte (nur offene Fragen) */
+  /** Bei der Auswertung als enthalten erkannte Kernpunkte (nur offene Fragen) */
   aiHits?: number[] | null | undefined;
 }
 
@@ -40,8 +40,8 @@ export function questionTitle(q: LQuestion): string {
 function Mark({ ok }: { ok: boolean }) {
   return (
     <span
-      className={`inline-flex size-7 flex-none items-center justify-center rounded-full text-white ${
-        ok ? "bg-lp-sage" : "bg-lp-warn"
+      className={`inline-flex size-7 flex-none items-center justify-center rounded-full text-lp-surface ${
+        ok ? "bg-lp-good" : "bg-lp-warn"
       }`}
     >
       {ok ? (
@@ -87,7 +87,7 @@ function ChoiceView({
         let badge = (
           <span
             className={`inline-flex size-7 flex-none items-center justify-center rounded-full text-[13px] font-bold ${
-              selected ? "bg-lp-ink text-white" : "bg-lp-line-soft text-lp-ink-3"
+              selected ? "bg-lp-ink text-lp-bg" : "bg-lp-line-soft text-lp-ink-3"
             }`}
           >
             {String.fromCharCode(65 + i)}
@@ -95,7 +95,7 @@ function ChoiceView({
         );
         if (!revealed && selected) cls = "border-2 border-lp-ink bg-lp-surface font-semibold";
         if (revealed && isCorrect) {
-          cls = "border-2 border-lp-sage bg-lp-sage-soft font-semibold";
+          cls = "border-2 border-lp-good bg-lp-good-soft font-semibold";
           badge = <Mark ok />;
         } else if (revealed && selected) {
           cls = "border-2 border-lp-warn bg-lp-warn-soft font-semibold";
@@ -166,7 +166,7 @@ function MatchingView({
   };
 
   const No = ({ n }: { n: number }) => (
-    <span className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-lp-sage text-xs font-extrabold text-white">
+    <span className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-lp-sage text-xs font-extrabold text-lp-on-sage">
       {n}
     </span>
   );
@@ -186,7 +186,7 @@ function MatchingView({
             <div
               key={l.id}
               className={`flex flex-col gap-1.5 rounded-2xl border-2 p-3.5 ${
-                ok ? "border-lp-sage bg-lp-sage-soft" : "border-lp-warn bg-lp-warn-soft"
+                ok ? "border-lp-good bg-lp-good-soft" : "border-lp-warn bg-lp-warn-soft"
               }`}
             >
               <div className="flex items-center gap-2.5">
@@ -302,7 +302,7 @@ function OrderingView({
           const ok = solution[i] === id;
           const cls = revealed
             ? ok
-              ? "border-2 border-lp-sage bg-lp-sage-soft"
+              ? "border-2 border-lp-good bg-lp-good-soft"
               : "border-2 border-lp-warn bg-lp-warn-soft"
             : "border-[1.5px] border-lp-sage-line bg-lp-sage-soft";
           return (
@@ -316,7 +316,7 @@ function OrderingView({
                 {revealed ? (
                   <Mark ok={ok} />
                 ) : (
-                  <span className="inline-flex size-7 flex-none items-center justify-center rounded-full bg-lp-sage text-[13px] font-extrabold text-white">
+                  <span className="inline-flex size-7 flex-none items-center justify-center rounded-full bg-lp-sage text-[13px] font-extrabold text-lp-on-sage">
                     {i + 1}
                   </span>
                 )}
@@ -375,7 +375,7 @@ function ClozeView({
           const ok = isClozeCorrect(q, b, value);
           const cls = revealed
             ? ok
-              ? "border-lp-sage bg-lp-sage-soft"
+              ? "border-lp-good bg-lp-good-soft"
               : "border-lp-warn bg-lp-warn-soft"
             : "border-lp-sage-line bg-lp-surface focus:border-lp-sage";
           return (
@@ -433,7 +433,7 @@ function OpenView({
       </div>
       {revealed ? (
         <div className="flex flex-col gap-3 rounded-[18px] border border-lp-line bg-lp-surface p-4">
-          <span className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-lp-sage">
+          <span className="text-[13px] font-extrabold text-lp-sage">
             {Array.isArray(aiHits) ? "Kernpunkte – Abgleich" : "Musterlösung – Kernpunkte"}
           </span>
           <ul className="flex flex-col gap-2">
@@ -449,7 +449,7 @@ function OpenView({
                     />
                   ) : (
                     <Check
-                      className="mt-0.5 size-[18px] flex-none text-lp-sage"
+                      className="mt-0.5 size-[18px] flex-none text-lp-good"
                       strokeWidth={2.4}
                     />
                   )}
@@ -457,9 +457,9 @@ function OpenView({
                     {p}
                     {judged ? (
                       <span
-                        className={`ml-1.5 text-xs font-bold ${hit ? "text-lp-sage" : "text-lp-warn-ink"}`}
+                        className={`ml-1.5 text-xs font-bold ${hit ? "text-lp-good" : "text-lp-warn-ink"}`}
                       >
-                        {hit ? "· getroffen" : "· fehlt noch"}
+                        {hit ? "· enthalten" : "· fehlt noch"}
                       </span>
                     ) : null}
                   </span>

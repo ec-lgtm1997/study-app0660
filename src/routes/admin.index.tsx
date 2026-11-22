@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { SubjectCard } from "@/components/SubjectCard";
 import { SubjectDialog } from "@/components/SubjectDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ImportDialog } from "@/components/ImportDialog";
 import {
   countsBySubject,
   createSubject,
@@ -38,7 +37,6 @@ function Startseite() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState<Subject | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["subjects"] });
@@ -63,25 +61,25 @@ function Startseite() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Verwaltung</h1>
-          <Link to="/" className="text-sm text-muted-foreground hover:text-primary">
-            Zum Lernbereich →
-          </Link>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            Importieren
-          </Button>
+    <main className="mx-auto min-h-screen w-full max-w-3xl px-4 pb-10 pt-8 font-lp text-lp-ink sm:px-6 sm:pt-12">
+      <header className="mb-6 flex flex-col gap-2">
+        <Link
+          to="/hinzufuegen"
+          className="-ml-1 self-start text-sm font-semibold text-lp-ink-3 hover:text-lp-sage"
+        >
+          ‹ Fragen hinzufügen
+        </Link>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h1 className="text-[31px] font-extrabold leading-[1.05] tracking-[-0.025em]">
+            Fächer und Fragen
+          </h1>
           <Button
             onClick={() => {
               setEditing(null);
               setDialogOpen(true);
             }}
           >
-            Fach hinzufügen
+            Fach anlegen
           </Button>
         </div>
       </header>
@@ -120,7 +118,6 @@ function Startseite() {
         description={`„${deleting?.name ?? ""}“ und alle zugehörigen Themengebiete und Fragen werden gelöscht.`}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-      <ImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
     </main>
   );
 }

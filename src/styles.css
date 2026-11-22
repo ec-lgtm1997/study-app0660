@@ -62,26 +62,26 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --radius: 0.875rem;
+  --background: #f4f6fb;
+  --foreground: #16203a;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.55 0.11 192);
-  --primary-foreground: oklch(0.99 0.005 190);
+  --primary: #2d4fd0;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
   --muted-foreground: oklch(0.554 0.046 257.417);
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: #d6455b;
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --ring: #aebdf3;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -143,24 +143,98 @@
   }
 }
 
-/* Lernbereich – ruhiges, helles Farbschema (Konzept „Lernplattform“) */
-@theme {
-  --color-lp-bg: #f6f7f5;
-  --color-lp-surface: #ffffff;
-  --color-lp-line: #e3e7e4;
-  --color-lp-line-soft: #eef1ef;
-  --color-lp-track: #edf0ee;
-  --color-lp-ink: #1c2826;
-  --color-lp-ink-2: #2f3b38;
-  --color-lp-ink-3: #44514d;
-  --color-lp-muted: #56635f;
-  --color-lp-sage: #2e6e62;
-  --color-lp-sage-dark: #1f4f46;
-  --color-lp-sage-soft: #e6f0ec;
-  --color-lp-sage-line: #9cc3b8;
-  --color-lp-sage-on: #dcebe6;
-  --color-lp-warn: #b25e26;
-  --color-lp-warn-ink: #8a4a1c;
-  --color-lp-warn-soft: #fbede4;
-  --font-lp: "Manrope", ui-sans-serif, system-ui, sans-serif;
+/* Lernbereich – kühles Papierweiß, ein klares Blau, Grün/Rot nur für richtig/falsch */
+:root {
+  --lp-bg: #f4f6fb;
+  --lp-surface: #ffffff;
+  --lp-line: #e1e6f0;
+  --lp-line-soft: #ebeff6;
+  --lp-track: #e7ecf6;
+  --lp-grid: #dce5f7;
+  --lp-ink: #16203a;
+  --lp-ink-2: #2b3550;
+  --lp-ink-3: #4a5470;
+  --lp-muted: #5b6582;
+  --lp-sage: #2d4fd0;
+  --lp-sage-dark: #1f3aa3;
+  --lp-sage-soft: #e7ecfd;
+  --lp-sage-line: #aebdf3;
+  --lp-sage-on: #d5ddfb;
+  --lp-good: #1a8f63;
+  --lp-good-soft: #e1f5ec;
+  --lp-warn: #d6455b;
+  --lp-warn-ink: #a92f44;
+  --lp-warn-soft: #fce9ec;
+  --lp-hero: #2d4fd0;
+  --lp-on-sage: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lp-bg: #0f1424;
+    --lp-surface: #182036;
+    --lp-line: #28314b;
+    --lp-line-soft: #222a42;
+    --lp-track: #252e48;
+    --lp-grid: #25304d;
+    --lp-ink: #eef1fa;
+    --lp-ink-2: #d4d9e8;
+    --lp-ink-3: #b3bbd2;
+    --lp-muted: #98a1bb;
+    --lp-sage: #7d95ff;
+    --lp-sage-dark: #9db0ff;
+    --lp-sage-soft: #222d52;
+    --lp-sage-line: #3c4b85;
+    --lp-sage-on: #c9d3ff;
+    --lp-good: #4cd49e;
+    --lp-good-soft: #163a30;
+    --lp-warn: #ff7d8f;
+    --lp-warn-ink: #ff9aa8;
+    --lp-warn-soft: #3d1d27;
+    --lp-hero: #2b3f9e;
+    --lp-on-sage: #0f1424;
+  }
+}
+
+@theme inline {
+  --color-lp-bg: var(--lp-bg);
+  --color-lp-surface: var(--lp-surface);
+  --color-lp-line: var(--lp-line);
+  --color-lp-line-soft: var(--lp-line-soft);
+  --color-lp-track: var(--lp-track);
+  --color-lp-grid: var(--lp-grid);
+  --color-lp-ink: var(--lp-ink);
+  --color-lp-ink-2: var(--lp-ink-2);
+  --color-lp-ink-3: var(--lp-ink-3);
+  --color-lp-muted: var(--lp-muted);
+  --color-lp-sage: var(--lp-sage);
+  --color-lp-sage-dark: var(--lp-sage-dark);
+  --color-lp-sage-soft: var(--lp-sage-soft);
+  --color-lp-sage-line: var(--lp-sage-line);
+  --color-lp-sage-on: var(--lp-sage-on);
+  --color-lp-good: var(--lp-good);
+  --color-lp-good-soft: var(--lp-good-soft);
+  --color-lp-warn: var(--lp-warn);
+  --color-lp-warn-ink: var(--lp-warn-ink);
+  --color-lp-warn-soft: var(--lp-warn-soft);
+  --color-lp-hero: var(--lp-hero);
+  --color-lp-on-sage: var(--lp-on-sage);
+  --font-lp: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-lp);
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--lp-sage);
+    outline-offset: 2px;
+  }
 }
