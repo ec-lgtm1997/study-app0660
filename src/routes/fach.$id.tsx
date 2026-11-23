@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -15,6 +15,7 @@ import {
   linkBtn,
 } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
+import { deleteSubject } from "@/lib/db";
 import { activeExams, examFormat, formatLabel, formatPool } from "@/lib/exams";
 import {
   QUESTION_TYPES,
@@ -256,6 +257,13 @@ function FachSeite() {
             </ul>
             <MasteryLegend />
           </section>
+
+          <DeleteSubject
+            id={id}
+            name={view.subject.name}
+            questions={view.progress.total}
+            exams={view.sessions.length}
+          />
         </>
       ) : null}
     </Page>
@@ -439,6 +447,83 @@ function FormatEditor({
       >
         Format übernehmen
       </button>
+    </div>
+  );
+}
+
+/** Fach endgültig löschen – mit zweitem Schritt zur Bestätigung. */
+function DeleteSubject({
+  id,
+  name,
+  questions,
+  exams,
+}: {
+  id: string;
+  name: string;
+  questions: number;
+  exams: number;
+}) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setStep("busy");
+    setError(null);
+    try {
+      await deleteSubject(id);
+      await queryClient.invalidateQueries({ queryKey: ["learn"] });
+      await navigate({ to: "/" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStep("idle");
+    }
+  };
+
+  if (step === "idle") {
+    return (
+      <div className="flex flex-col items-center gap-1 pt-6">
+        <button
+          type="button"
+          onClick={() => setStep("confirm")}
+          className="min-h-10 rounded-xl px-3 text-[13px] font-semibold text-lp-muted hover:bg-lp-warn-soft hover:text-lp-warn-ink"
+        >
+          Fach löschen
+        </button>
+        {error ? (
+          <p className="text-[13px] text-lp-warn-ink">Löschen hat nicht geklappt: {error}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-3 rounded-[22px] border border-lp-warn/40 bg-lp-warn-soft p-4">
+      <p className="text-sm font-bold text-lp-warn-ink">„{name}“ endgültig löschen?</p>
+      <p className="text-[13px] leading-relaxed text-lp-ink-2">
+        Gelöscht werden {questions} Fragen, alle Themengebiete und Prüfungen
+        {exams ? ` sowie ${exams} gespeicherte Prüfungsergebnisse` : ""} und der ganze Lernverlauf
+        in diesem Fach. Das lässt sich nicht rückgängig machen.
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={step === "busy"}
+          onClick={() => setStep("idle")}
+          className="min-h-11 flex-1 rounded-xl border-[1.5px] border-lp-line bg-lp-surface text-sm font-semibold text-lp-ink-2"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          disabled={step === "busy"}
+          onClick={() => void run()}
+          className="min-h-11 flex-1 rounded-xl bg-lp-warn text-sm font-bold text-lp-surface disabled:opacity-60"
+        >
+          {step === "busy" ? "Wird gelöscht …" : "Ja, löschen"}
+        </button>
+      </div>
     </div>
   );
 }

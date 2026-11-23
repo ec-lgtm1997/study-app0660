@@ -32,7 +32,23 @@ export async function updateSubject(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Löscht ein Fach vollständig: Ergebnisse zu seinen Fragen, Fragen, Themengebiete, Fach.
+ * Schritt für Schritt, damit es unabhängig von Datenbank-Kaskaden funktioniert.
+ */
 export async function deleteSubject(id: string) {
+  const qs = await supabase.from("questions").select("id").eq("subject_id", id);
+  if (qs.error) throw new Error(qs.error.message);
+  const ids = (qs.data ?? []).map((q) => q.id as string);
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const a = await supabase.from("attempts").delete().in("question_id", chunk);
+    if (a.error) throw new Error(a.error.message);
+    const q = await supabase.from("questions").delete().in("id", chunk);
+    if (q.error) throw new Error(q.error.message);
+  }
+  const t = await supabase.from("topics").delete().eq("subject_id", id);
+  if (t.error) throw new Error(t.error.message);
   const { error } = await supabase.from("subjects").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

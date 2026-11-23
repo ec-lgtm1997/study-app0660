@@ -61,6 +61,7 @@ function Startseite() {
     onSuccess: () => {
       setDeleting(null);
       refresh();
+      void queryClient.invalidateQueries({ queryKey: ["learn"] });
     },
   });
 
@@ -93,6 +94,11 @@ function Startseite() {
         <p className="text-sm text-muted-foreground">Noch keine Fächer.</p>
       ) : null}
 
+      {remove.isError ? (
+        <p className="mb-4 rounded-xl bg-lp-warn-soft px-3 py-2.5 text-sm text-lp-warn-ink">
+          Löschen hat nicht geklappt: {remove.error.message}
+        </p>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         {(subjects.data ?? []).map((subject) => (
           <SubjectCard
@@ -149,7 +155,7 @@ function Startseite() {
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Fach löschen?"
-        description={`„${deleting?.name ?? ""}“ und alle zugehörigen Themengebiete und Fragen werden gelöscht.`}
+        description={`„${deleting?.name ?? ""}“ wird mit allen Themengebieten, Fragen, Prüfungen und Ergebnissen endgültig gelöscht.`}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
     </main>
