@@ -66,6 +66,18 @@ export interface ImportResult {
   inserted: number;
   skipped: number;
   examCount: number;
+  /** Alles, was nötig ist, um diesen Import wieder zu entfernen */
+  undo: ImportUndo;
+}
+
+export interface ImportUndo {
+  subject: string;
+  subjectId: string;
+  subjectCreated: boolean;
+  topicIds: string[];
+  questionIds: string[];
+  examIds: string[];
+  at: string;
 }
 
 const TYPES = ["multiple_choice", "matching", "ordering", "cloze", "open"] as const;
@@ -389,6 +401,7 @@ export async function runImport(
     (topicRows.data ?? []).map((t) => [t.name as string, t.id as string]),
   );
   const missing = orderedTopics({ ...file, questions: fresh }).filter((n) => !topicIds.has(n));
+  const createdTopicIds: string[] = [];
   if (missing.length) {
     const offset = topicIds.size;
     const created = await supabase
@@ -398,8 +411,10 @@ export async function runImport(
       )
       .select("id, name");
     if (created.error) throw new Error(created.error.message);
-    for (const t of (created.data ?? []) as { id: string; name: string }[])
+    for (const t of (created.data ?? []) as { id: string; name: string }[]) {
       topicIds.set(t.name, t.id);
+      createdTopicIds.push(t.id);
+    }
   }
 
   // 3) Fragen in Paketen einfügen; Metadaten wandern nach content.meta
@@ -411,9 +426,14 @@ export async function runImport(
     solution: q.solution,
   }));
   const BATCH = 50;
+  const questionIds: string[] = [];
   for (let i = 0; i < rows.length; i += BATCH) {
-    const { error } = await supabase.from("questions").insert(rows.slice(i, i + BATCH) as never);
+    const { data: ins, error } = await supabase
+      .from("questions")
+      .insert(rows.slice(i, i + BATCH) as never)
+      .select("id");
     if (error) throw new Error(`Fehler nach ${i} Fragen: ${error.message}`);
+    for (const r of (ins ?? []) as { id: string }[]) questionIds.push(r.id);
     onProgress?.(Math.min(i + BATCH, rows.length), rows.length);
   }
 
@@ -431,6 +451,7 @@ export async function runImport(
     return `p${n}`;
   };
   let added = 0;
+  const examIds: string[] = [];
 
   if (file.exams?.length) {
     for (const e of file.exams) {
@@ -440,13 +461,17 @@ export async function runImport(
       if (!qs.some((id) => freshIds.has(id))) continue;
       const clash = exams.some((x) => x.id === e.id);
       const name = /^Prüfung \d+$/.test(e.name) && clash ? `Prüfung ${nextNo()}` : e.name;
-      exams.push({ id: clash ? uniqueId() : e.id, name, questions: qs });
+      const examId = clash ? uniqueId() : e.id;
+      exams.push({ id: examId, name, questions: qs });
+      examIds.push(examId);
       added++;
     }
   } else {
     const k = autoExamCount(fresh.length);
     for (const qs of buildAutoExams(file, fresh, k)) {
-      exams.push({ id: uniqueId(), name: `Prüfung ${nextNo()}`, questions: qs });
+      const examId = uniqueId();
+      exams.push({ id: examId, name: `Prüfung ${nextNo()}`, questions: qs });
+      examIds.push(examId);
       added++;
     }
   }
@@ -466,5 +491,101 @@ export async function runImport(
     inserted: rows.length,
     skipped,
     examCount: added,
+    undo: {
+      subject: file.subject,
+      subjectId: subjectId as string,
+      subjectCreated,
+      topicIds: createdTopicIds,
+      questionIds,
+      examIds,
+      at: new Date().toISOString(),
+    },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Import rückgängig machen                                             */
+/* ------------------------------------------------------------------ */
+
+const UNDO_KEY = "lernplattform.letzterImport";
+
+export function rememberImport(u: ImportUndo) {
+  try {
+    window.localStorage.setItem(UNDO_KEY, JSON.stringify(u));
+  } catch {
+    // ohne Speicher nur direkt nach dem Import rückgängig machbar
+  }
+}
+
+export function lastImport(): ImportUndo | null {
+  try {
+    const raw = window.localStorage.getItem(UNDO_KEY);
+    return raw ? (JSON.parse(raw) as ImportUndo) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetImport() {
+  try {
+    window.localStorage.removeItem(UNDO_KEY);
+  } catch {
+    // nichts zu tun
+  }
+}
+
+/**
+ * Entfernt genau das, was ein Import angelegt hat: Fragen (samt Antworten darauf),
+ * die dabei entstandenen Prüfungen, neue Themengebiete und – falls neu – das Fach.
+ */
+export async function undoImport(u: ImportUndo): Promise<void> {
+  const CHUNK = 100;
+  for (let i = 0; i < u.questionIds.length; i += CHUNK) {
+    const ids = u.questionIds.slice(i, i + CHUNK);
+    const a = await supabase.from("attempts").delete().in("question_id", ids);
+    if (a.error) throw new Error(a.error.message);
+    const q = await supabase.from("questions").delete().in("id", ids);
+    if (q.error) throw new Error(q.error.message);
+  }
+
+  const left = await supabase
+    .from("questions")
+    .select("id", { count: "exact", head: true })
+    .eq("subject_id", u.subjectId);
+  if (left.error) throw new Error(left.error.message);
+  const remaining = left.count ?? 0;
+
+  if (u.subjectCreated && remaining === 0) {
+    const t = await supabase.from("topics").delete().eq("subject_id", u.subjectId);
+    if (t.error) throw new Error(t.error.message);
+    const s = await supabase.from("subjects").delete().eq("id", u.subjectId);
+    if (s.error) throw new Error(s.error.message);
+    return;
+  }
+
+  // Prüfungen aus diesem Import entfernen
+  if (u.examIds.length) {
+    const cur = await supabase
+      .from("subjects")
+      .select("exam_config")
+      .eq("id", u.subjectId)
+      .single();
+    if (!cur.error) {
+      const cfg = ((cur.data as { exam_config: Record<string, unknown> | null }).exam_config ??
+        {}) as { exams?: ImportExam[] };
+      const exams = (cfg.exams ?? []).filter((e) => !u.examIds.includes(e.id));
+      await supabase
+        .from("subjects")
+        .update({ exam_config: { ...cfg, exams } } as never)
+        .eq("id", u.subjectId);
+    }
+  }
+  // neu angelegte, jetzt leere Themengebiete entfernen
+  for (const id of u.topicIds) {
+    const c = await supabase
+      .from("questions")
+      .select("id", { count: "exact", head: true })
+      .eq("topic_id", id);
+    if (!c.error && (c.count ?? 0) === 0) await supabase.from("topics").delete().eq("id", id);
+  }
 }

@@ -1,16 +1,23 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Upload } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Back, Card, Page, primaryBtn, secondaryBtn, softBtn } from "@/components/learn/ui";
+import { Check, FileText, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Back, Bar, Card, Page, primaryBtn, secondaryBtn, softBtn } from "@/components/learn/ui";
 import { useLearnData } from "@/hooks/use-learn";
+import { generatorAvailable } from "@/lib/ai-generate.functions";
 import { buildAnleitung } from "@/lib/anleitung";
+import { MAX_PDF_MB, generateFromSource, readSource, type Source } from "@/lib/generate";
 import {
+  forgetImport,
+  lastImport,
   parseImportFile,
   previewImport,
+  rememberImport,
   runImport,
+  undoImport,
   type ImportPreview,
   type ImportResult,
+  type ImportUndo,
   type ParsedImport,
 } from "@/lib/import";
 
@@ -75,6 +82,25 @@ function Hinzufuegen() {
   const [progress, setProgress] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  // Automatisch aus Unterlagen
+  const [genOn, setGenOn] = useState(false);
+  const srcRef = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<Source | null>(null);
+  const [genProgress, setGenProgress] = useState<{ done: number; total: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const cancelRef = useRef({ cancelled: false });
+
+  // Rückgängig machen
+  const [undo, setUndo] = useState<ImportUndo | null>(null);
+  const [undoState, setUndoState] = useState<"idle" | "confirm" | "busy" | "done">("idle");
+
+  useEffect(() => {
+    setUndo(lastImport());
+    generatorAvailable()
+      .then((r) => setGenOn(r.available))
+      .catch(() => setGenOn(false));
+  }, []);
+
   const subjects = data?.subjects ?? [];
   const selected = choice || subjects[0]?.id || NEW;
   const subjectName =
@@ -130,6 +156,10 @@ function Hinzufuegen() {
     try {
       const res = await runImport(parsed, (d, t) => setProgress(`${d} von ${t} Fragen`));
       setResult(res);
+      rememberImport(res.undo);
+      setUndo(res.undo);
+      setUndoState("idle");
+      setSource(null);
       setParsed(null);
       setPreview(null);
       setPasted("");
@@ -141,6 +171,73 @@ function Hinzufuegen() {
     } finally {
       setBusy(false);
       setProgress(null);
+    }
+  };
+
+  const pickSource = async (f: File | undefined) => {
+    if (!f) return;
+    setError(null);
+    setNotice(null);
+    try {
+      setSource(await readSource(f));
+    } catch (e) {
+      setSource(null);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const generate = async () => {
+    if (!source || !subjectName.trim()) return;
+    setError(null);
+    setNotice(null);
+    setParsed(null);
+    setPreview(null);
+    setResult(null);
+    cancelRef.current = { cancelled: false };
+    setGenProgress({ done: 0, total: count });
+    try {
+      const out = await generateFromSource({
+        subject: subjectName.trim(),
+        topics,
+        count,
+        source,
+        onProgress: setGenProgress,
+        signal: cancelRef.current,
+      });
+      if (out.stopped) setNotice(out.stopped);
+      if (out.parsed) {
+        setPreview(await previewImport(out.parsed));
+        setParsed(out.parsed);
+      } else if (!out.stopped && !cancelRef.current.cancelled) {
+        setError("Aus dieser Unterlage konnten keine Fragen erstellt werden.");
+      }
+    } catch (e) {
+      setError(
+        `Die Fragenerstellung hat nicht geklappt: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setGenProgress(null);
+    }
+  };
+
+  const revert = async () => {
+    if (!undo) return;
+    if (undoState !== "confirm") {
+      setUndoState("confirm");
+      return;
+    }
+    setUndoState("busy");
+    try {
+      await undoImport(undo);
+      forgetImport();
+      setUndoState("done");
+      setResult(null);
+      await queryClient.invalidateQueries({ queryKey: ["learn"] });
+    } catch (e) {
+      setUndoState("idle");
+      setError(
+        `Rückgängig machen hat nicht geklappt: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   };
 
@@ -156,63 +253,170 @@ function Hinzufuegen() {
           Fragen hinzufügen
         </h1>
         <p className="text-sm leading-relaxed text-lp-muted">
-          Aus deinen Unterlagen entstehen in drei Schritten neue Fragen samt Lösungen.
+          Aus deinen Unterlagen entstehen neue Fragen samt Lösungen.
         </p>
       </header>
 
+      {undo && undoState !== "done" && !result ? (
+        <Card className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-sm font-bold">Letzter Import</span>
+            <span className="text-[13px] text-lp-muted">
+              {undo.questionIds.length} Fragen in {undo.subject}
+              {undo.subjectCreated ? " (Fach neu angelegt)" : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void revert()}
+            disabled={undoState === "busy"}
+            className="min-h-10 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-lp-warn-ink hover:bg-lp-warn-soft"
+          >
+            {undoState === "confirm"
+              ? "Wirklich entfernen?"
+              : undoState === "busy"
+                ? "Wird entfernt …"
+                : "Rückgängig machen"}
+          </button>
+        </Card>
+      ) : null}
+      {undoState === "done" ? (
+        <Card>
+          <p className="text-sm text-lp-muted">
+            Der Import wurde entfernt. Antworten auf diese Fragen sind ebenfalls gelöscht.
+          </p>
+        </Card>
+      ) : null}
+
+      <Card className="flex flex-col gap-2.5 p-5">
+        <h2 className="font-lp text-[15px] font-bold tracking-normal">Für welches Fach?</h2>
+        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
+          <label className="sr-only" htmlFor="fach">
+            Fach
+          </label>
+          <select
+            id="fach"
+            value={selected}
+            onChange={(e) => {
+              setChoice(e.target.value);
+              setCopied(false);
+            }}
+            className={input}
+          >
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+            <option value={NEW}>Neues Fach …</option>
+          </select>
+          <label className="sr-only" htmlFor="anzahl">
+            Anzahl Fragen
+          </label>
+          <select
+            id="anzahl"
+            value={count}
+            onChange={(e) => {
+              setCount(Number(e.target.value));
+              setCopied(false);
+            }}
+            className={input}
+          >
+            {[20, 30, 40, 50, 80, 120].map((n) => (
+              <option key={n} value={n}>
+                {n} Fragen
+              </option>
+            ))}
+          </select>
+        </div>
+        {selected === NEW ? (
+          <input
+            value={newName}
+            onChange={(e) => {
+              setNewName(e.target.value);
+              setCopied(false);
+            }}
+            placeholder="Name des neuen Fachs, z. B. Gerontologie"
+            className={input}
+          />
+        ) : null}
+      </Card>
+
+      {genOn ? (
+        <Card className="flex flex-col gap-3 p-5">
+          <div className="flex flex-col gap-1">
+            <h2 className="font-lp text-[15px] font-bold tracking-normal">
+              Direkt aus deinen Unterlagen
+            </h2>
+            <p className="text-[13px] leading-relaxed text-lp-muted">
+              Zusammenfassung, Folien oder Skript hochladen, die Fragen entstehen automatisch. PDF
+              bis {MAX_PDF_MB} MB oder Word-Datei.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => srcRef.current?.click()}
+            disabled={Boolean(genProgress)}
+            className="flex items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-lp-sage bg-lp-sage-soft px-4 py-4 text-left transition-colors hover:bg-lp-sage-on"
+          >
+            <FileText className="size-6 flex-none text-lp-sage" strokeWidth={2} />
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-bold text-lp-sage">
+                {source ? source.name : "Unterlage auswählen"}
+              </span>
+              <span className="text-xs text-lp-muted">
+                {source ? "Andere Datei wählen" : "PDF, Word oder Text"}
+              </span>
+            </span>
+          </button>
+          <input
+            ref={srcRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.md,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              void pickSource(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          {genProgress ? (
+            <div className="flex flex-col gap-2">
+              <Bar pct={(genProgress.done / Math.max(1, genProgress.total)) * 100} />
+              <div className="flex items-center justify-between text-[13px] text-lp-muted">
+                <span>
+                  {genProgress.done} von {genProgress.total} Fragen erstellt …
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    cancelRef.current.cancelled = true;
+                  }}
+                  className="font-semibold hover:text-lp-ink"
+                >
+                  Abbrechen
+                </button>
+              </div>
+              <p className="text-xs text-lp-muted">Bitte die Seite geöffnet lassen.</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={!source || !subjectName.trim() || busy}
+              onClick={() => void generate()}
+              className={primaryBtn}
+            >
+              {count} Fragen erstellen
+            </button>
+          )}
+        </Card>
+      ) : null}
+
+      <h2 className="-mb-2 pt-1 text-lg font-bold">
+        {genOn ? "Oder über ChatGPT" : "Über ChatGPT"}
+      </h2>
       <Card className="p-5">
         <ol className="flex flex-col gap-6">
           <Step no={1} done={copied} title="Anleitung kopieren">
-            <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
-              <label className="sr-only" htmlFor="fach">
-                Fach
-              </label>
-              <select
-                id="fach"
-                value={selected}
-                onChange={(e) => {
-                  setChoice(e.target.value);
-                  setCopied(false);
-                }}
-                className={input}
-              >
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-                <option value={NEW}>Neues Fach …</option>
-              </select>
-              <label className="sr-only" htmlFor="anzahl">
-                Anzahl Fragen
-              </label>
-              <select
-                id="anzahl"
-                value={count}
-                onChange={(e) => {
-                  setCount(Number(e.target.value));
-                  setCopied(false);
-                }}
-                className={input}
-              >
-                {[20, 30, 40, 50, 80, 120].map((n) => (
-                  <option key={n} value={n}>
-                    {n} Fragen
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selected === NEW ? (
-              <input
-                value={newName}
-                onChange={(e) => {
-                  setNewName(e.target.value);
-                  setCopied(false);
-                }}
-                placeholder="Name des neuen Fachs, z. B. Gerontologie"
-                className={input}
-              />
-            ) : null}
             <p className="text-[13px] leading-relaxed text-lp-muted">
               Ein fertiger Text, der genau beschreibt, wie die Fragen aussehen müssen.
             </p>
@@ -325,6 +529,12 @@ function Hinzufuegen() {
 
       {busy && !preview ? <p className="text-sm text-lp-muted">Wird geprüft …</p> : null}
 
+      {notice ? (
+        <div className="rounded-[18px] border border-lp-line bg-lp-surface p-4 text-sm leading-relaxed text-lp-ink-3">
+          {notice}
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-[18px] border border-lp-warn/40 bg-lp-warn-soft p-4 text-sm leading-relaxed text-lp-warn-ink">
           {error}
@@ -385,6 +595,18 @@ function Hinzufuegen() {
               Zum Fach
             </Link>
           ) : null}
+          <button
+            type="button"
+            onClick={() => void revert()}
+            disabled={undoState === "busy"}
+            className="min-h-11 text-sm font-semibold text-lp-warn-ink hover:text-lp-warn"
+          >
+            {undoState === "confirm"
+              ? "Wirklich wieder entfernen?"
+              : undoState === "busy"
+                ? "Wird entfernt …"
+                : "Rückgängig machen"}
+          </button>
         </Card>
       ) : null}
 

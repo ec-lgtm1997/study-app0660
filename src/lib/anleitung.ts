@@ -6,6 +6,8 @@ export function buildAnleitung(input: {
   subject: string;
   count: number;
   topics: string[];
+  /** true = direkt aus der App (keine Datei anbieten, keine Aufteilung) */
+  direct?: boolean;
 }): string {
   const subject = input.subject.trim() || "NAME DES FACHS";
   const topics = input.topics.length
@@ -34,7 +36,7 @@ Erfinde keine Inhalte, die nicht durch die Unterlagen gedeckt sind. Wenn du etwa
 ${topics}
 
 ## Format
-Antworte ausschließlich mit EINEM JSON-Objekt, ohne Text davor oder danach. Biete es mir am besten als Datei „fragen.json“ zum Herunterladen an. Aufbau:
+Antworte ausschließlich mit EINEM JSON-Objekt, ohne Text davor oder danach.${input.direct ? "" : " Biete es mir am besten als Datei „fragen.json“ zum Herunterladen an."} Aufbau:
 
 {
   "subject": "${subject}",
@@ -79,6 +81,5 @@ So sehen die fünf Fragetypen aus (genau diese Feldnamen verwenden):
 
 ## Wichtig
 - Gültiges JSON: doppelte Anführungszeichen, keine Kommentare, keine abgeschnittenen Stellen.
-- Wenn die Antwort zu lang wird, teile in mehrere vollständige JSON-Dateien auf (z. B. je 40 Fragen) und nummeriere die IDs fortlaufend weiter.
-- Keine Prüfungen und keinen Notenschlüssel erstellen, das macht die App selbst.`;
+${input.direct ? "" : "- Wenn die Antwort zu lang wird, teile in mehrere vollständige JSON-Dateien auf (z. B. je 40 Fragen) und nummeriere die IDs fortlaufend weiter.\n"}- Keine Prüfungen und keinen Notenschlüssel erstellen, das macht die App selbst.`;
 }
