@@ -89,10 +89,16 @@ function Hinzufuegen() {
   const [genProgress, setGenProgress] = useState<{ done: number; total: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const cancelRef = useRef({ cancelled: false });
+  const reviewRef = useRef<HTMLDivElement>(null);
 
   // Rückgängig machen
   const [undo, setUndo] = useState<ImportUndo | null>(null);
   const [undoState, setUndoState] = useState<"idle" | "confirm" | "busy" | "done">("idle");
+
+  useEffect(() => {
+    if (preview || result || notice)
+      reviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [preview, result, notice]);
 
   useEffect(() => {
     setUndo(lastImport());
@@ -384,7 +390,9 @@ function Hinzufuegen() {
               <Bar pct={(genProgress.done / Math.max(1, genProgress.total)) * 100} />
               <div className="flex items-center justify-between text-[13px] text-lp-muted">
                 <span>
-                  {genProgress.done} von {genProgress.total} Fragen erstellt …
+                  {genProgress.done === 0
+                    ? "Unterlagen werden gelesen, die ersten Fragen entstehen …"
+                    : `${genProgress.done} von ${genProgress.total} Fragen erstellt, es geht weiter …`}
                 </span>
                 <button
                   type="button"
@@ -403,9 +411,9 @@ function Hinzufuegen() {
               type="button"
               disabled={!source || !subjectName.trim() || busy}
               onClick={() => void generate()}
-              className={primaryBtn}
+              className={preview && parsed ? secondaryBtn : primaryBtn}
             >
-              {count} Fragen erstellen
+              {preview && parsed ? "Noch einmal neu erstellen" : `${count} Fragen erstellen`}
             </button>
           )}
         </Card>
@@ -527,6 +535,7 @@ function Hinzufuegen() {
         </ol>
       </Card>
 
+      <div ref={reviewRef} className="-mb-6 scroll-mt-4" aria-hidden="true" />
       {busy && !preview ? <p className="text-sm text-lp-muted">Wird geprüft …</p> : null}
 
       {notice ? (
