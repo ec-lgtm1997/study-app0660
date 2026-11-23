@@ -97,6 +97,279 @@ export async function readSource(file: File): Promise<Source> {
   throw new Error("Bitte eine PDF, Word-Datei (.docx) oder Textdatei hochladen.");
 }
 
+/* ------------------------------------------------------------------ */
+/* Warteschlange: mehrere Unterlagen, Einstellungen pro Datei            */
+/* ------------------------------------------------------------------ */
+
+export type Mix = "gemischt" | "mehr_offen" | "nur_mc" | "nur_offen" | "eigene";
+export type Difficulty = "leicht" | "gemischt" | "schwer";
+export type JobStatus = "wartet" | "laeuft" | "fertig" | "fehler";
+
+export interface Job {
+  id: string;
+  name: string;
+  file: Blob;
+  role: "quelle" | "lernziele";
+  topic: string;
+  count: number;
+  mix: Mix;
+  /** nur bei mix = "eigene" */
+  types: string[];
+  difficulty: Difficulty;
+  wish: string;
+  status: JobStatus;
+  message?: string | undefined;
+  batchesDone: number;
+  questions: ImportQuestion[];
+  problems: ImportProblem[];
+}
+
+export const MIX_LABEL: Record<Mix, string> = {
+  gemischt: "Gemischt",
+  mehr_offen: "Mehr offene",
+  nur_mc: "Nur Multiple Choice",
+  nur_offen: "Nur offene",
+  eigene: "Eigene Auswahl",
+};
+
+export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  leicht: "Eher leicht",
+  gemischt: "Gemischt",
+  schwer: "Anspruchsvoll",
+};
+
+function mixLine(job: Job): string | undefined {
+  switch (job.mix) {
+    case "mehr_offen":
+      return "Fragetypen: etwa 35 % open, 40 % multiple_choice, 10 % matching, 8 % ordering, 7 % cloze.";
+    case "nur_mc":
+      return "Fragetypen: ausschließlich multiple_choice (gerne auch mit mehreren richtigen Antworten).";
+    case "nur_offen":
+      return "Fragetypen: ausschließlich open (offene Fragen mit Musterantwort und Kernpunkten).";
+    case "eigene":
+      return job.types.length
+        ? `Fragetypen: ausschließlich ${job.types.join(", ")}, ungefähr gleich verteilt.`
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function allowedTypes(job: Job): string[] | null {
+  if (job.mix === "nur_mc") return ["multiple_choice"];
+  if (job.mix === "nur_offen") return ["open"];
+  if (job.mix === "eigene" && job.types.length) return job.types;
+  return null;
+}
+
+function difficultyLine(job: Job): string | undefined {
+  if (job.difficulty === "leicht")
+    return "Schwierigkeit: etwa 50 % leicht (1), 40 % mittel (2), 10 % anspruchsvoll (3).";
+  if (job.difficulty === "schwer")
+    return "Schwierigkeit: etwa 10 % leicht (1), 40 % mittel (2), 50 % anspruchsvoll (3).";
+  return undefined;
+}
+
+export const topicFromName = (name: string) =>
+  name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export function newJob(file: File): Job {
+  const lower = file.name.toLowerCase();
+  return {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    name: file.name,
+    file,
+    role: /lernziel/.test(lower) ? "lernziele" : "quelle",
+    topic: topicFromName(file.name),
+    count: 20,
+    mix: "gemischt",
+    types: [],
+    difficulty: "gemischt",
+    wish: "",
+    status: "wartet",
+    batchesDone: 0,
+    questions: [],
+    problems: [],
+  };
+}
+
+export function checkFile(file: File): string | null {
+  const lower = file.name.toLowerCase();
+  if (!/\.(pdf|docx|txt|md)$/.test(lower) && file.type !== "application/pdf")
+    return `${file.name}: bitte PDF, Word (.docx) oder Text.`;
+  if (lower.endsWith(".pdf") && file.size > MAX_PDF_MB * 1024 * 1024)
+    return `${file.name} ist größer als ${MAX_PDF_MB} MB. Bitte aufteilen.`;
+  return null;
+}
+
+const asFile = (job: Job) => new File([job.file], job.name, { type: job.file.type });
+
+/**
+ * Arbeitet eine Datei paketweise ab und meldet nach jedem Paket den neuen Stand
+ * (zum Zwischenspeichern). Bereits erledigte Pakete werden übersprungen.
+ */
+export async function runJob(opts: {
+  job: Job;
+  subject: string;
+  knownTopics: string[];
+  goals: Job | null;
+  onUpdate: (job: Job) => Promise<void> | void;
+  signal: { cancelled: boolean };
+}): Promise<Job> {
+  let job: Job = { ...opts.job, status: "laeuft", message: undefined };
+  await opts.onUpdate(job);
+
+  let source: Source;
+  let goals: Source | null = null;
+  try {
+    source = await readSource(asFile(job));
+    if (opts.goals) goals = await readSource(asFile(opts.goals));
+  } catch (e) {
+    job = { ...job, status: "fehler", message: e instanceof Error ? e.message : String(e) };
+    await opts.onUpdate(job);
+    return job;
+  }
+  // zusammen höchstens ~20 MB, sonst ohne Lernziele
+  if (
+    goals?.kind === "pdf" &&
+    source.kind === "pdf" &&
+    source.base64.length + goals.base64.length > 26_000_000
+  )
+    goals = null;
+
+  const stamp = job.id;
+  const allowed = allowedTypes(job);
+  let empty = 0;
+
+  while (job.questions.length < job.count && empty < 2) {
+    const b = job.batchesDone;
+    const batches = b + Math.max(1, Math.ceil((job.count - job.questions.length) / BATCH));
+    if (opts.signal.cancelled) {
+      job = { ...job, status: "wartet" };
+      await opts.onUpdate(job);
+      return job;
+    }
+    const n = Math.min(BATCH, job.count - job.questions.length);
+    const seen = job.questions
+      .slice(-120)
+      .map((q) => `- ${String((q.content as { text?: string }).text ?? "").slice(0, 110)}`);
+    const prompt = `${buildAnleitung({
+      subject: opts.subject,
+      count: n,
+      topics: opts.knownTopics,
+      direct: true,
+      fixedTopic: job.topic.trim() || undefined,
+      mixLine: mixLine(job),
+      difficultyLine: difficultyLine(job),
+      wish: job.wish,
+      withLernziele: Boolean(goals),
+    })}
+
+## Dieser Durchgang
+Paket ${b + 1} von ${batches}. Erstelle genau ${n} Fragen. Verwende als IDs "g${stamp}-${b + 1}-001", "g${stamp}-${b + 1}-002" usw.
+${
+  seen.length
+    ? `Diese Fragen gibt es schon. Wiederhole sie nicht, sondern decke andere Inhalte der Unterlage ab:\n${seen.join("\n")}`
+    : "Beginne mit den wichtigsten Inhalten der Unterlage."
+}`;
+
+    const call = () =>
+      generateQuestions({
+        data: {
+          prompt,
+          ...(source.kind === "pdf" ? { pdfBase64: source.base64 } : { text: source.text }),
+          ...(goals
+            ? goals.kind === "pdf"
+              ? { goalsPdfBase64: goals.base64 }
+              : { goalsText: goals.text.slice(0, 100_000) }
+            : {}),
+        },
+      });
+    let res: Awaited<ReturnType<typeof call>>;
+    try {
+      res = await call();
+      if (!res.ok && res.reason === "busy" && !opts.signal.cancelled) {
+        await new Promise((r) => setTimeout(r, 20_000));
+        res = await call();
+      }
+    } catch (e) {
+      res = {
+        ok: false,
+        reason: "error",
+        detail: e instanceof Error ? e.message.slice(0, 160) : String(e),
+      };
+    }
+    if (!res.ok) {
+      job = { ...job, status: "fehler", message: reasonText(res.reason, res.detail) };
+      await opts.onUpdate(job);
+      return job;
+    }
+
+    const questions = job.questions.slice();
+    const problems = job.problems.slice();
+    try {
+      let raw = res.json;
+      try {
+        const o: unknown = JSON.parse(raw);
+        if (Array.isArray(o)) raw = JSON.stringify({ subject: opts.subject, questions: o });
+        else if (o && typeof o === "object")
+          raw = JSON.stringify({ ...(o as object), subject: opts.subject });
+      } catch {
+        // parseImportFile meldet den Fehler verständlich
+      }
+      const parsed = parseImportFile(raw);
+      for (const q of parsed.file.questions) {
+        if (allowed && !allowed.includes(q.type)) {
+          problems.push({
+            where: `Frage ${q.id}`,
+            message: "passt nicht zu den gewählten Fragetypen",
+          });
+          continue;
+        }
+        questions.push(job.topic.trim() ? { ...q, topic: job.topic.trim() } : q);
+      }
+      problems.push(...parsed.problems);
+    } catch (e) {
+      problems.push({
+        where: `${job.name}, Paket ${b + 1}`,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+    if (questions.length === job.questions.length) empty++;
+    else empty = 0;
+    job = { ...job, questions, problems, batchesDone: b + 1 };
+    await opts.onUpdate(job);
+  }
+
+  job = { ...job, status: "fertig" };
+  await opts.onUpdate(job);
+  return job;
+}
+
+/** Alle fertigen Fragen aller Dateien als ein Import. */
+export function combineJobs(subject: string, jobs: Job[]): ParsedImport | null {
+  const questions: ImportQuestion[] = [];
+  const problems: ImportProblem[] = [];
+  const topics: string[] = [];
+  const ids = new Set<string>();
+  for (const j of jobs) {
+    if (j.role !== "quelle") continue;
+    for (const q of j.questions) {
+      if (ids.has(q.id)) continue;
+      ids.add(q.id);
+      questions.push(q);
+      const t = (q.topic ?? "").trim();
+      if (t && !topics.includes(t)) topics.push(t);
+    }
+    problems.push(...j.problems);
+  }
+  return questions.length ? { file: { subject, topics, questions }, problems } : null;
+}
+
 export interface GenerateProgress {
   done: number;
   total: number;

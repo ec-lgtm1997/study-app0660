@@ -34,6 +34,9 @@ const Input = z.object({
   pdfBase64: z.string().max(28_000_000).optional(),
   /** … oder als reiner Text (z. B. aus Word) */
   text: z.string().max(400_000).optional(),
+  /** Lernziele zur Orientierung (PDF base64 oder Text) */
+  goalsPdfBase64: z.string().max(8_000_000).optional(),
+  goalsText: z.string().max(100_000).optional(),
 });
 
 export const generateQuestions = createServerFn({ method: "POST" })
@@ -48,6 +51,9 @@ export const generateQuestions = createServerFn({ method: "POST" })
     if (data.pdfBase64)
       parts.push({ inline_data: { mime_type: "application/pdf", data: data.pdfBase64 } });
     if (data.text) parts.push({ text: `<unterlagen>\n${data.text}\n</unterlagen>` });
+    if (data.goalsPdfBase64)
+      parts.push({ inline_data: { mime_type: "application/pdf", data: data.goalsPdfBase64 } });
+    if (data.goalsText) parts.push({ text: `<lernziele>\n${data.goalsText}\n</lernziele>` });
     parts.push({ text: data.prompt });
 
     let lastDetail = "";
@@ -58,7 +64,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            `${process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com"}/v1beta/models/${model}:generateContent`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json", "x-goog-api-key": key },

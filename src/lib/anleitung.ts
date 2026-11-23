@@ -8,11 +8,23 @@ export function buildAnleitung(input: {
   topics: string[];
   /** true = direkt aus der App (keine Datei anbieten, keine Aufteilung) */
   direct?: boolean;
+  /** Alle Fragen in genau dieses Themengebiet */
+  fixedTopic?: string | undefined;
+  /** ersetzt die Zeile zur Fragetypen-Mischung */
+  mixLine?: string | undefined;
+  /** ersetzt die Zeile zur Schwierigkeit */
+  difficultyLine?: string | undefined;
+  /** eigener Wunsch der Nutzerin */
+  wish?: string | undefined;
+  /** true = es liegen zusätzlich die Lernziele bei */
+  withLernziele?: boolean | undefined;
 }): string {
   const subject = input.subject.trim() || "NAME DES FACHS";
-  const topics = input.topics.length
-    ? `Diese Themengebiete gibt es im Fach schon. Verwende sie, wenn eine Frage dazu passt (exakt gleich geschrieben), sonst lege neue an:\n${input.topics.map((t) => `- ${t}`).join("\n")}`
-    : "Teile die Fragen in sinnvolle Themengebiete ein (3 bis 8, kurze Namen).";
+  const topics = input.fixedTopic
+    ? `Alle Fragen gehören zum Themengebiet „${input.fixedTopic}“. Setze bei jeder Frage "topic": "${input.fixedTopic}" und "topics": ["${input.fixedTopic}"].`
+    : input.topics.length
+      ? `Diese Themengebiete gibt es im Fach schon. Verwende sie, wenn eine Frage dazu passt (exakt gleich geschrieben), sonst lege neue an:\n${input.topics.map((t) => `- ${t}`).join("\n")}`
+      : "Teile die Fragen in sinnvolle Themengebiete ein (3 bis 8, kurze Namen).";
 
   return `Du erstellst Prüfungsfragen für das Pflegestudium (Gesundheits- und Krankenpflege, Österreich) zum Fach „${subject}“. Die Fragen werden in eine Lern-App importiert. Halte dich exakt an das Format unten.
 
@@ -25,13 +37,14 @@ Erfinde keine Inhalte, die nicht durch die Unterlagen gedeckt sind. Wenn du etwa
 
 ## Umfang und Mischung
 - Erstelle ${input.count} Fragen. Decke die Unterlagen möglichst vollständig ab, keine doppelten Fragen.
-- Schwierigkeit: etwa 25 % leicht (1), 45 % mittel (2), 30 % anspruchsvoll (3).
-- Fragetypen mischen: etwa 60 % multiple_choice, 15 % matching, 8 % ordering, 7 % cloze, 10 % open.
+- ${input.difficultyLine ?? "Schwierigkeit: etwa 25 % leicht (1), 45 % mittel (2), 30 % anspruchsvoll (3)."}
+- ${input.mixLine ?? "Fragetypen mischen: etwa 60 % multiple_choice, 15 % matching, 8 % ordering, 7 % cloze, 10 % open."}
 - Viele kurze Fallbeispiele aus dem Pflegealltag („Frau M., 74, …“), besonders bei mittleren und anspruchsvollen Fragen.
 - Falsche Antwortoptionen müssen plausibel sein, nicht offensichtlich falsch. Die richtige Option nicht immer an dieselbe Stelle setzen.
 - Jede Frage bekommt eine kurze Erklärung („explanation“), warum die Lösung stimmt.
 - Sprache: Deutsch, österreichische Begriffe, geschlechtergerecht wie in den Unterlagen.
 
+${input.withLernziele ? '\n## Lernziele\nDie Lernziele liegen als eigene Unterlage bei (markiert als <lernziele> oder als zweites Dokument). Erstelle aus ihnen KEINE eigenen Fragen, sondern nutze sie nur, um prüfungsrelevante Inhalte zu erkennen und mit "exam_relevant": true zu markieren. Grundlage der Fragen ist ausschließlich die andere Unterlage.\n' : ""}${input.wish?.trim() ? `\n## Besonderer Wunsch\n${input.wish.trim()}\n` : ""}
 ## Themengebiete
 ${topics}
 
