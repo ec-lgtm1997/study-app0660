@@ -111,11 +111,13 @@ export interface GenerateOutcome {
 const reasonText = (r: string, detail?: string) =>
   r === "not_configured"
     ? "Die Fragenerstellung ist noch nicht eingerichtet (Schlüssel GEMINI_API_KEY fehlt)."
-    : r === "limit"
-      ? "Das kostenlose Kontingent ist gerade ausgeschöpft. Versuch es in ein paar Minuten oder morgen wieder."
-      : r === "too_large"
-        ? "Die Unterlage ist zu groß. Teile sie bitte auf."
-        : `Die Fragenerstellung hat nicht geklappt${detail ? ` (${detail})` : ""}.`;
+    : r === "busy"
+      ? "Google ist gerade überlastet. Die bis hierhin erstellten Fragen kannst du übernehmen und den Rest später noch einmal erstellen."
+      : r === "limit"
+        ? "Das kostenlose Kontingent ist gerade ausgeschöpft. Die bis hierhin erstellten Fragen kannst du übernehmen, den Rest in ein paar Minuten oder morgen."
+        : r === "too_large"
+          ? "Die Unterlage ist zu groß. Teile sie bitte auf."
+          : `Die Fragenerstellung hat nicht geklappt${detail ? ` (${detail})` : ""}.`;
 
 export async function generateFromSource(opts: {
   subject: string;
@@ -149,14 +151,21 @@ ${
     : "Beginne mit den wichtigsten Inhalten der Unterlagen."
 }`;
 
-    const res = await generateQuestions({
-      data: {
-        prompt,
-        ...(opts.source.kind === "pdf"
-          ? { pdfBase64: opts.source.base64 }
-          : { text: opts.source.text }),
-      },
-    });
+    const call = () =>
+      generateQuestions({
+        data: {
+          prompt,
+          ...(opts.source.kind === "pdf"
+            ? { pdfBase64: opts.source.base64 }
+            : { text: opts.source.text }),
+        },
+      });
+    let res = await call();
+    // Google überlastet: einmal kurz warten und dasselbe Paket erneut versuchen
+    if (!res.ok && res.reason === "busy" && !opts.signal?.cancelled) {
+      await new Promise((r) => setTimeout(r, 20_000));
+      res = await call();
+    }
     if (!res.ok) {
       stopped = reasonText(res.reason, res.detail);
       break;

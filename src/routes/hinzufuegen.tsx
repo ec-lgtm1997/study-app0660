@@ -567,7 +567,9 @@ function Hinzufuegen() {
             <Row label="Fehlerhaft">{preview.invalidCount}, werden ausgelassen</Row>
           ) : null}
           <Row label="Neue Prüfungen">{preview.examCount || "keine"}</Row>
-          {preview.subjectExists === false && subjects.length ? (
+          {preview.subjectExists === false &&
+          subjects.length &&
+          !(selected === NEW && preview.subject === newName.trim()) ? (
             <p className="text-[13px] leading-relaxed text-lp-muted">
               Ein Fach mit diesem Namen gibt es noch nicht, es wird neu angelegt. Soll es zu einem
               bestehenden Fach? Dann muss „subject“ genau gleich heißen.

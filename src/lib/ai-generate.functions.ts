@@ -20,7 +20,13 @@ export const generatorAvailable = createServerFn({ method: "GET" }).handler(asyn
 
 export type GenerateResult =
   | { ok: true; json: string }
-  | { ok: false; reason: "not_configured" | "limit" | "too_large" | "error"; detail?: string };
+  | {
+      ok: false;
+      reason: "not_configured" | "limit" | "busy" | "too_large" | "error";
+      detail?: string;
+    };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const Input = z.object({
   prompt: z.string().min(50).max(40_000),
@@ -45,50 +51,60 @@ export const generateQuestions = createServerFn({ method: "POST" })
     parts.push({ text: data.prompt });
 
     let lastDetail = "";
+    let sawBusy = false;
+    let sawLimit = false;
     for (const model of candidateModels()) {
-      try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.6,
-                maxOutputTokens: 60_000,
-              },
-            }),
-          },
-        );
-        if (res.status === 429) return { ok: false, reason: "limit" };
-        if (res.status === 413) return { ok: false, reason: "too_large" };
-        if (res.status === 404 || res.status === 400) {
-          lastDetail = `${model}: ${res.status} ${(await res.text()).slice(0, 300)}`;
-          console.error("Gemini abgelehnt", lastDetail);
-          continue;
+      // Bei Überlastung (503/500) oder kurzzeitigem Limit (429) erst warten und erneut versuchen
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts }],
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  temperature: 0.6,
+                  maxOutputTokens: 60_000,
+                },
+              }),
+            },
+          );
+          if (res.status === 413) return { ok: false, reason: "too_large" };
+          if (res.status === 503 || res.status === 500 || res.status === 429) {
+            if (res.status === 429) sawLimit = true;
+            else sawBusy = true;
+            lastDetail = `${model}: ${res.status}`;
+            console.error("Gemini ausgelastet", lastDetail, `Versuch ${attempt + 1}`);
+            await sleep([4000, 12000, 0][attempt] ?? 0);
+            continue;
+          }
+          if (!res.ok) {
+            lastDetail = `${model}: ${res.status} ${(await res.text()).slice(0, 300)}`;
+            console.error("Gemini abgelehnt", lastDetail);
+            break; // nächstes Modell
+          }
+          const body = (await res.json()) as {
+            candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+          };
+          const cand = body.candidates?.[0];
+          const out = (cand?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+          if (!out.trim()) {
+            lastDetail = `${model}: leere Antwort (${cand?.finishReason ?? "?"})`;
+            console.error("Gemini", lastDetail);
+            break;
+          }
+          return { ok: true, json: out };
+        } catch (e) {
+          lastDetail = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+          console.error("Gemini-Aufruf fehlgeschlagen", lastDetail);
+          break;
         }
-        if (!res.ok) {
-          lastDetail = `${model}: ${res.status} ${(await res.text()).slice(0, 300)}`;
-          console.error("Gemini-Fehler", lastDetail);
-          continue;
-        }
-        const body = (await res.json()) as {
-          candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
-        };
-        const cand = body.candidates?.[0];
-        const out = (cand?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-        if (!out.trim()) {
-          lastDetail = `${model}: leere Antwort (${cand?.finishReason ?? "?"})`;
-          console.error("Gemini", lastDetail);
-          continue;
-        }
-        return { ok: true, json: out };
-      } catch (e) {
-        lastDetail = `${model}: ${e instanceof Error ? e.message : String(e)}`;
-        console.error("Gemini-Aufruf fehlgeschlagen", lastDetail);
       }
     }
+    if (sawBusy) return { ok: false, reason: "busy", detail: lastDetail };
+    if (sawLimit) return { ok: false, reason: "limit", detail: lastDetail };
     return { ok: false, reason: "error", detail: lastDetail };
   });
